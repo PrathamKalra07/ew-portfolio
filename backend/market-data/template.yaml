@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda REST facade for Upstox market data
+
+Parameters:
+  CognitoUserPoolArn:
+    Type: String
+  CognitoClientId:
+    Type: String
+  UpstoxSecretArn:
+    Type: String
+    Description: ARN of the Secrets Manager secret containing the Upstox Analytics Token
+  AllowedOrigin:
+    Type: String
+    Default: http://localhost:5173
+  ExposeErrorDetails:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Return diagnostic error details to the client; use false in production
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 512
+    Environment:
+      Variables:
+        UPSTOX_SECRET_ARN: !Ref UpstoxSecretArn
+        ALLOWED_ORIGIN: !Ref AllowedOrigin
+        EXPOSE_ERROR_DETAILS: !Ref ExposeErrorDetails
+
+Resources:
+  MarketDataApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: [!Ref AllowedOrigin]
+        AllowHeaders: [authorization, content-type]
+        AllowMethods: [GET, OPTIONS]
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            JwtConfiguration:
+              issuer: !Sub
+                - https://cognito-idp.${AWS::Region}.amazonaws.com/${PoolId}
+                - PoolId: !Select [1, !Split ['/', !Ref CognitoUserPoolArn]]
+              audience: [!Ref CognitoClientId]
+            IdentitySource: $request.header.Authorization
+
+  MarketDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_function.lambda_handler
+      Policies:
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref UpstoxSecretArn
+      Events:
+        Quotes: { Type: HttpApi, Properties: { ApiId: !Ref MarketDataApi, Path: /market/quotes, Method: GET } }
+        Search: { Type: HttpApi, Properties: { ApiId: !Ref MarketDataApi, Path: /market/search, Method: GET } }
+        Details: { Type: HttpApi, Properties: { ApiId: !Ref MarketDataApi, Path: /market/details, Method: GET } }
+        Historical: { Type: HttpApi, Properties: { ApiId: !Ref MarketDataApi, Path: /market/historical, Method: GET } }
+        Diagnostics: { Type: HttpApi, Properties: { ApiId: !Ref MarketDataApi, Path: /market/diagnostics, Method: GET } }
+        Health: { Type: HttpApi, Properties: { ApiId: !Ref MarketDataApi, Path: /market/health, Method: GET, Auth: { Authorizer: NONE } } }
+
+Outputs:
+  MarketDataApiUrl:
+    Value: !Sub https://${MarketDataApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}

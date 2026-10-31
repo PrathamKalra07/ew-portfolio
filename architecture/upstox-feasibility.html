@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upstox Feasibility</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div class="topbar"><div class="topbar-in">
+  <div class="brand">StockAI <span>/ Architecture</span></div>
+  <nav class="navlinks">
+    <a href="index.html">System Architecture</a>
+    <a href="flow.html">Flow Map</a>
+    <a href="prediction-engine.html">Prediction Engine</a>
+    <a href="upstox-feasibility.html" class="on">Upstox Feasibility</a>
+    <a href="complete-walkthrough.html">Complete Walkthrough</a>
+  </nav>
+  <button class="themebtn" id="tbtn" type="button">Dark</button>
+</div></div>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Document 4 of 5 &middot; Data Provider</div>
+  <h1>Is Upstox Feasible?</h1>
+  <p class="lede">Every claim in this document was checked against the official Upstox developer
+  documentation on 29 October 2026. The short answer is yes — and it is a better fit than the
+  alternative for reasons that go beyond price.</p>
+  <div class="metaline">
+    <span><b>Version</b> 3.0</span> &middot;
+    <span><b>Verified</b> 29 October 2026</span> &middot;
+    <span><b>Verdict</b> <span class="pill ok">Feasible — proceed</span></span> &middot;
+    <span><b>Cost</b> ₹0 / month</span>
+  </div>
+</header>
+
+<div class="note ok">
+  <span class="lbl">Verdict in one paragraph</span>
+  <p>The Upstox <b>Analytics Token</b> gives free, read-only access to everything this project needs:
+  historical daily candles back to <b>January 2000</b>, live WebSocket market data, and on-demand quotes.
+  It is valid for <b>one year</b>, costs <b>nothing</b>, and — critically — needs <b>no static IP</b>
+  for any of these endpoints. It also cannot place orders, which for a forecasting system is a
+  safety feature rather than a limitation.</p>
+  <p><b>One genuine open item remains:</b> written confirmation of data storage, model-training and
+  display rights. That is a commercial question, not a technical one, and it does not block building
+  a private research MVP.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="checks"><span class="num">1</span>What was verified</h2>
+<p class="sub">Each row was confirmed directly from the Upstox developer documentation,
+not from a blog or a forum.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Claim</th><th>Verified finding</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Analytics Token is free</td><td>Documentation states it "is free to use and does not carry any cost"</td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>Valid for one year</td><td>One year from generation; one active token per account</td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>Covers historical data</td><td>Historical Data, Market Quote, WebSocket, Fundamentals and News categories all permitted</td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td><b>No static IP required</b></td><td>Market Quote, Historical, WebSocket, Option Chain and others are listed <b>without</b> a static-IP requirement</td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>Cannot place orders</td><td>"Does not support trading operations" — GET APIs only</td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>Daily history depth</td><td>Daily, weekly and monthly candles available from <b>January 2000</b></td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>Minute history depth</td><td>Minute and hourly candles from <b>January 2022</b></td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>Request rate limits</td><td>50/sec, 500/min, 2,000 per 30 min for standard APIs including historical candles</td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>WebSocket connections</td><td>2 concurrent for standard accounts, 5 for Upstox Plus</td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>WebSocket capacity</td><td>Up to 5,000 instruments in <code>ltpc</code> mode alone</td><td><span class="pill ok">Confirmed</span></td></tr>
+<tr><td>Feed is Protobuf binary</td><td>Confirmed; requires the provided <code>.proto</code> schema to decode</td><td><span class="pill warn">Confirmed — adds work</span></td></tr>
+<tr><td>Data storage rights</td><td>Not addressed in developer documentation</td><td><span class="pill stop">Open</span></td></tr>
+<tr><td>Training and display rights</td><td>Not addressed in developer documentation</td><td><span class="pill stop">Open</span></td></tr>
+</tbody></table></div>
+
+<!-- ===================================================================== -->
+<h2 id="vs"><span class="num">2</span>Upstox vs Zerodha for this project</h2>
+<p class="sub">Both are strong Indian brokers. The comparison below is specific to a system that
+<em>only reads market data and never places an order</em>. For an execution system the answer could differ.</p>
+
+<div class="vs">
+  <div class="vscard win">
+    <header>Upstox Analytics Token <span class="pill ok">Recommended</span></header>
+    <ul>
+      <li><b>₹0 per month</b></li>
+      <li><b>Token valid 1 year</b> — generate once, set a reminder</li>
+      <li><b>No static IP</b> for market data → no NAT Gateway → <b>~$35/mo saved</b></li>
+      <li>Daily candles from <b>Jan 2000</b>; up to 10 years in one request</li>
+      <li>WebSocket: 5,000 instruments, 2 connections</li>
+      <li><b>Physically cannot trade</b> — removes an entire category of risk</li>
+      <li>Generous limits: 50 requests/second</li>
+    </ul>
+  </div>
+  <div class="vscard lose">
+    <header>Zerodha Kite Connect <span class="pill warn">Not recommended here</span></header>
+    <ul>
+      <li><b>₹500 per month</b> — data is not in the free tier</li>
+      <li><b>Token expires every single day</b></li>
+      <li><b>Renewal needs interactive login + 2FA</b> — cannot be fully automated</li>
+      <li>Static IP mandatory for orders → NAT Gateway → ~$35/mo</li>
+      <li>IP changeable only <b>once per week</b> — a mistake blocks you for days</li>
+      <li>Trading-capable credentials in a non-trading system</li>
+      <li>Order rate limit 10/sec</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note stop">
+  <span class="lbl">The decisive difference is not the ₹500</span>
+  <p>The Zerodha access token expires daily and must be regenerated through a browser login with
+  two-factor authentication. There is no supported way to automate this — automating it would mean
+  storing a password and a 2FA seed and driving a headless browser, which is fragile and defeats
+  the purpose of 2FA.</p>
+  <p>In practice that means <b>a person performs a manual step before 08:30 every working day, forever</b>.
+  Miss it and the day's forecast does not run. The Upstox token lasts a year.</p>
+  <p>For a system intended to run unattended, this is the difference between a product and a chore.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="apis"><span class="num">3</span>The APIs we will use</h2>
+
+<h3>3.1 Authentication</h3>
+<p>One header on every request. No OAuth redirect, no daily dance.</p>
+<pre><code>Authorization: Bearer &lt;UPSTOX_ANALYTICS_TOKEN&gt;
+Accept: application/json</code></pre>
+<p>The token lives in AWS Secrets Manager and is read at runtime. It never appears in source code,
+container images or logs.</p>
+
+<h3>3.2 Historical candles — the backbone of training</h3>
+<pre><code>GET https://api.upstox.com/v3/historical-candle/
+    NSE_EQ%7CINE002A01018/days/1/2026-10-28/2021-10-28</code></pre>
+<p>Returns an array per candle, in this fixed order:</p>
+<pre><code>[ timestamp, open, high, low, close, volume, open_interest ]
+
+[ "2026-10-27T00:00:00+05:30", 250.1, 257.0, 249.2, 255.4, 1254000, 0 ]</code></pre>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Unit</th><th>Intervals</th><th>Available from</th><th>Max per request</th></tr></thead>
+<tbody>
+<tr><td><b>days</b></td><td>1</td><td><b>January 2000</b></td><td>10 years</td></tr>
+<tr><td>weeks / months</td><td>1</td><td>January 2000</td><td>No limit</td></tr>
+<tr><td>hours</td><td>1–5</td><td>January 2022</td><td>1 quarter</td></tr>
+<tr><td>minutes</td><td>1–300</td><td>January 2022</td><td>1 month (interval ≤15), 1 quarter (>15)</td></tr>
+</tbody></table></div>
+
+<div class="note ok">
+  <span class="lbl">What this means for us</span>
+  <p>Five years of daily candles for 50 stocks needs <b>50 requests</b> — one per stock, each covering
+  the full period. At 50 requests/second that is theoretically a second of work; in practice it is
+  a single Lambda invocation with polite pacing. The entire training dataset can be assembled in minutes.</p>
+</div>
+
+<h3>3.3 Live WebSocket feed</h3>
+<p>Two steps: ask for an authorised URL, then connect to it.</p>
+<pre><code># 1 — get a one-time authorised URL
+GET https://api.upstox.com/v3/feed/market-data-feed/authorize
+Authorization: Bearer &lt;TOKEN&gt;
+
+{"status":"success","data":{"authorized_redirect_uri":"wss://..."}}
+
+# 2 — connect, then send a BINARY frame (not text) to subscribe
+{
+  "guid": "stockai-stream-001",
+  "method": "sub",
+  "data": { "mode": "ltpc", "instrumentKeys": ["NSE_EQ|INE002A01018"] }
+}</code></pre>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Mode</th><th>Gives you</th><th>Max instruments</th><th>Our use</th></tr></thead>
+<tbody>
+<tr><td><code>ltpc</code></td><td>Last price, quantity, close</td><td>5,000</td><td><b>Our choice</b> — all we need</td></tr>
+<tr><td><code>full</code></td><td>Adds market depth</td><td>2,000</td><td>Not needed</td></tr>
+<tr><td><code>option_greeks</code></td><td>Options data</td><td>3,000</td><td>Out of scope</td></tr>
+</tbody></table></div>
+
+<div class="note warn">
+  <span class="lbl">Three implementation details that will cost a developer a day if missed</span>
+  <p><b>1.</b> The subscription message must be sent as a <b>binary frame</b>, not a text frame.
+  Most WebSocket libraries default to text, and the connection simply does nothing.</p>
+  <p><b>2.</b> Incoming messages are <b>Protobuf-encoded</b>, not JSON. You need the official
+  <code>.proto</code> file and a generated decoder. This is the single largest piece of integration
+  work in the data layer — budget a day.</p>
+  <p><b>3.</b> The authorise call <b>redirects</b>, and your client must follow redirects.
+  In Node this means setting <code>followRedirects</code> explicitly.</p>
+</div>
+
+<h3>3.4 Quotes — for recovery, not polling</h3>
+<pre><code>GET /v3/market-quote/ltp?instrument_key=NSE_EQ%7CINE002A01018   # light
+GET /v3/market-quote/quotes?instrument_key=...                   # full, 500 per call</code></pre>
+<p>Used to fill gaps after a WebSocket disconnect and to sanity-check the stream — not as a
+substitute for it. Polling 50 stocks every second would burn the rate limit for no benefit.</p>
+
+<h3>3.5 Instrument master — refreshed daily, never hard-coded</h3>
+<p>Upstox identifies instruments by keys like <code>NSE_EQ|INE002A01018</code>. The second part is the
+ISIN, which is stable. The full instrument file is published daily and must be re-downloaded.</p>
+
+<div class="note stop">
+  <span class="lbl">Why this matters more than it looks</span>
+  <p>Instrument identifiers change — on symbol changes, mergers and corporate restructuring.
+  A hard-coded key that silently starts resolving to a different instrument produces data that is
+  perfectly well-formed and completely wrong. Nothing errors. The model simply learns from the wrong
+  company's prices.</p>
+  <p>The daily refresh compares every tracked symbol's key against yesterday's and raises an alarm
+  on any change. This is a 20-line safeguard that prevents a class of failure that is otherwise
+  nearly invisible.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="limits"><span class="num">4</span>Limits, and whether they constrain us</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Limit</th><th>Documented value</th><th>Our usage</th><th>Headroom</th></tr></thead>
+<tbody>
+<tr><td>Requests per second</td><td>50</td><td>~2 at peak</td><td><span class="pill ok">25×</span></td></tr>
+<tr><td>Requests per minute</td><td>500</td><td>~60 during backfill</td><td><span class="pill ok">8×</span></td></tr>
+<tr><td>Requests per 30 min</td><td>2,000</td><td>~200 on the heaviest morning</td><td><span class="pill ok">10×</span></td></tr>
+<tr><td>WebSocket connections</td><td>2</td><td>1</td><td><span class="pill ok">One spare for failover</span></td></tr>
+<tr><td>Instruments per stream</td><td>5,000 (<code>ltpc</code>)</td><td>50</td><td><span class="pill ok">100×</span></td></tr>
+<tr><td>Quote batch size</td><td>500 per call</td><td>50 in one call</td><td><span class="pill ok">10×</span></td></tr>
+<tr><td>Token lifetime</td><td>1 year</td><td>Alarm at 11 months</td><td><span class="pill ok">Ample</span></td></tr>
+<tr><td>Active tokens</td><td>1 per account</td><td>1</td><td><span class="pill warn">Exactly enough</span></td></tr>
+</tbody></table></div>
+
+<div class="note">
+  <span class="lbl">The one limit worth planning around</span>
+  <p><b>One active token per account.</b> Development, testing and the demo environment would all
+  share it. Generating a new token invalidates the old one, so two developers working simultaneously
+  will interrupt each other.</p>
+  <p>Mitigation is simple: one token in Secrets Manager, shared by all environments, with a documented
+  rule that nobody regenerates it without telling the team. If that becomes painful, a second Upstox
+  account for development is the clean answer.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="gaps"><span class="num">5</span>What Upstox does not give us</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Need</th><th>Available?</th><th>Where it comes from instead</th></tr></thead>
+<tbody>
+<tr><td>Historical financial news</td><td><span class="pill stop">No</span></td><td>A separate licensed news provider</td></tr>
+<tr><td>Macro indicators (oil, gold, USD/INR)</td><td><span class="pill warn">Partial</span></td><td>Upstox has some global instruments; RBI and commodity feeds for the rest</td></tr>
+<tr><td>Corporate action history</td><td><span class="pill warn">Not as a clean feed</span></td><td>NSE announcements, curated once during setup</td></tr>
+<tr><td>Delivery percentage</td><td><span class="pill stop">No</span></td><td>NSE end-of-day bhavcopy file, free download</td></tr>
+<tr><td>Point-in-time index membership</td><td><span class="pill stop">No</span></td><td>NSE reconstitution circulars, curated manually</td></tr>
+</tbody></table></div>
+
+<p>None of these are Upstox shortcomings — they are simply outside what a broker's market-data API
+provides. Each has a known source. The manual curation items (corporate actions, index membership)
+are roughly <b>two days of setup work</b> and are explicitly budgeted, because skipping them
+invalidates every backtest the system will ever produce.</p>
+
+<!-- ===================================================================== -->
+<h2 id="rights"><span class="num">6</span>The open question — data rights</h2>
+
+<div class="note stop">
+  <span class="lbl">This is the only genuine blocker, and it is commercial, not technical</span>
+  <p>Free API access is <b>not</b> the same as the right to store data indefinitely, train commercial
+  models on it, or display it to the public. Exchange data carries redistribution restrictions that sit
+  underneath whatever the broker's API happens to allow, and the developer documentation does not
+  address these questions either way.</p>
+</div>
+
+<h3>Three questions to put in writing</h3>
+<ol class="steps">
+  <li><span class="st">Storage</span>
+    <span class="sd">May we retain historical candle data in our own S3 storage indefinitely,
+    for reproducible research?</span></li>
+  <li><span class="st">Model training</span>
+    <span class="sd">May we use that retained data to train machine-learning models, including
+    models that may later support a commercial product?</span></li>
+  <li><span class="st">Display</span>
+    <span class="sd">May we display prices and derived forecasts to (a) internal users only,
+    (b) a closed set of invited external users, (c) the general public?</span></li>
+</ol>
+
+<div class="note ok">
+  <span class="lbl">Why this does not block starting</span>
+  <p>For a <b>private, internal research MVP</b> — invite-only dashboard, no external users,
+  no public display — the risk is low and the activity is ordinary. Build the system, prove the
+  models work or do not, and resolve the rights question in parallel.</p>
+  <p>What it <em>does</em> block is any public launch. The clarification should be requested in
+  Week 1 so the answer arrives long before it is needed, rather than becoming an emergency later.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="tests"><span class="num">7</span>Tests before committing</h2>
+<p class="sub">Roughly two days of work. Do these before the full build, not during it.</p>
+
+<ol class="steps">
+  <li><span class="st">Generate the token and make one call</span>
+    <span class="sd">Confirms the account is active with eligible segments. Upstox can reject API access
+    when an account has no active segments, so this is worth proving on day one.</span>
+    <span class="sv">~1 hour</span></li>
+
+  <li><span class="st">Pull 5 years of daily candles for 50 stocks</span>
+    <span class="sd">Check for missing days against the NSE trading calendar, verify prices look correct
+    across known stock splits, and confirm the data is split-adjusted or identify that it is not.</span>
+    <span class="sv">~4 hours</span></li>
+
+  <li><span class="st">Run the WebSocket through a full session</span>
+    <span class="sd">Connect before the open, decode Protobuf, deliberately kill the connection mid-session,
+    and verify automatic reconnect and resubscribe. This is the riskiest integration — prove it early.</span>
+    <span class="sv">~1 day</span></li>
+
+  <li><span class="st">Cross-check prices against a second source</span>
+    <span class="sd">Compare a sample of closing prices against NSE's published bhavcopy.
+    They should match exactly. A mismatch means an adjustment or identifier problem.</span>
+    <span class="sv">~2 hours</span></li>
+
+  <li><span class="st">Deliberately exceed the rate limit</span>
+    <span class="sd">Confirm the error response looks as expected and that backoff handling works
+    before it happens during a real backfill.</span>
+    <span class="sv">~1 hour</span></li>
+
+  <li><span class="st">Send the data-rights questions</span>
+    <span class="sd">The three questions in Section 6. Start the clock early — a written answer
+    may take weeks.</span>
+    <span class="sv">~1 hour</span></li>
+</ol>
+
+<!-- ===================================================================== -->
+<h2 id="fallback"><span class="num">8</span>If Upstox does not work out</h2>
+<p>The architecture deliberately keeps the provider behind a thin internal interface, so replacing
+it is a contained change rather than a rewrite.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Alternative</th><th>Cost</th><th>Trade-off</th></tr></thead>
+<tbody>
+<tr><td><b>Zerodha Kite Connect</b></td><td>₹500/mo</td><td>Works well, but daily token renewal is a permanent manual step</td></tr>
+<tr><td><b>Dhan / Fyers / Angel One</b></td><td>Varies</td><td>Similar free or low-cost API tiers; each needs its own verification pass</td></tr>
+<tr><td><b>NSE bhavcopy only</b></td><td>Free</td><td>End-of-day data only — no live prices, but sufficient to train and evaluate models</td></tr>
+<tr><td><b>Paid vendor</b></td><td>Significant</td><td>Clean licensing and support; the right answer only if going commercial</td></tr>
+</tbody></table></div>
+
+<div class="note ok">
+  <span class="lbl">The useful fallback insight</span>
+  <p>The <b>model training and evaluation work does not depend on live data at all</b>. It needs
+  historical candles, which NSE publishes free as end-of-day bhavcopy files.</p>
+  <p>So if the Upstox integration stalls for any reason, the most valuable part of the project —
+  finding out whether these forecasts have any real edge — can proceed regardless. Live prices are
+  a dashboard feature, not a research dependency. That is worth knowing before committing a timeline.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="verdict"><span class="num">9</span>Recommendation</h2>
+
+<div class="note ok">
+  <span class="lbl">Proceed with Upstox</span>
+  <p><b>Technically:</b> everything needed is confirmed available, free, and well within the
+  published limits. Daily history to 2000 is deeper than required, and the WebSocket comfortably
+  handles 100× our instrument count.</p>
+  <p><b>Operationally:</b> the one-year token and the absence of a static-IP requirement remove the
+  two biggest sources of daily friction in the alternative design.</p>
+  <p><b>Financially:</b> ₹0 per month for market data, and it eliminates the NAT Gateway, saving a
+  further ~$35/month.</p>
+  <p><b>Risk-wise:</b> a read-only token that cannot place an order is the correct credential for a
+  system that must never trade.</p>
+</div>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Action</th><th>When</th><th>Owner</th></tr></thead>
+<tbody>
+<tr><td>Confirm the Upstox account is active with eligible segments</td><td>Day 1</td><td>Sponsor</td></tr>
+<tr><td>Generate the Analytics Token, store in Secrets Manager</td><td>Day 1</td><td>Engineer</td></tr>
+<tr><td>Run the six tests in Section 7</td><td>Days 1–2</td><td>Engineer</td></tr>
+<tr><td>Send the three data-rights questions in writing</td><td>Day 1</td><td>Sponsor</td></tr>
+<tr><td>Set a calendar reminder for token renewal at 11 months</td><td>Day 1</td><td>Engineer</td></tr>
+<tr><td>Begin the historical backfill</td><td>Day 3</td><td>Engineer</td></tr>
+</tbody></table></div>
+
+<!-- ===================================================================== -->
+<h2 id="sources"><span class="num">10</span>Sources</h2>
+<p class="sub">All verified against official Upstox developer documentation on 29 October 2026.
+Re-check before implementation — API documentation changes.</p>
+
+<ul class="tight">
+  <li><a href="https://upstox.com/developer/api-documentation/analytics-token/">Analytics Token</a> — cost, validity, permitted categories, static-IP requirements</li>
+  <li><a href="https://upstox.com/developer/api-documentation/rate-limiting/">Rate limiting</a> — per-second, per-minute and per-30-minute limits</li>
+  <li><a href="https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/">Historical Candle V3</a> — units, intervals, date ranges, availability, response shape</li>
+  <li><a href="https://upstox.com/developer/api-documentation/v3/get-market-data-feed/">Market Data Feed V3</a> — connections, modes, instrument limits, Protobuf, binary subscription</li>
+  <li><a href="https://upstox.com/developer/api-documentation/instruments/">Instruments</a> — instrument key format and daily files</li>
+  <li><a href="https://upstox.com/developer/api-documentation/ltp-v3/">LTP Quotes V3</a> and <a href="https://upstox.com/developer/api-documentation/get-full-market-quote-v3/">Full Market Quote V3</a></li>
+</ul>
+
+<div class="note warn">
+  <span class="lbl">A note on sourcing</span>
+  <p>Everything marked <span class="pill ok">Confirmed</span> above comes from Upstox's own
+  documentation. Nothing in this document relies on a blog post, a forum answer or a third-party summary.</p>
+  <p>Where the documentation is silent — storage, training and display rights — this document says
+  <span class="pill stop">Open</span> rather than guessing. Those gaps are real and are the only
+  items standing between this design and a public launch.</p>
+</div>
+
+<div class="footer">
+  <span>StockAI — Upstox Feasibility v3.0 · Verified 29 October 2026</span>
+  <span>Verify against live documentation before implementation</span>
+</div>
+
+</div>
+
+<script>
+(function () {
+  var r = document.documentElement, b = document.getElementById('tbtn');
+  var saved = null;
+  try { saved = localStorage.getItem('sa-theme-v2'); } catch (e) {}
+  var cur = saved || 'light';
+  apply(cur);
+  b.addEventListener('click', function () {
+    cur = cur === 'dark' ? 'light' : 'dark';
+    apply(cur);
+    try { localStorage.setItem('sa-theme-v2', cur); } catch (e) {}
+  });
+  function apply(t) {
+    r.setAttribute('data-theme', t);
+    b.textContent = t === 'dark' ? 'Light' : 'Dark';
+  }
+})();
+</script>
+
+</body>
+</html>

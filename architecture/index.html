@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockAI Architecture</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div class="topbar"><div class="topbar-in">
+  <div class="brand">StockAI <span>/ Architecture</span></div>
+  <nav class="navlinks">
+    <a href="index.html" class="on">System Architecture</a>
+    <a href="flow.html">Flow Map</a>
+    <a href="prediction-engine.html">Prediction Engine</a>
+    <a href="upstox-feasibility.html">Upstox Feasibility</a>
+    <a href="complete-walkthrough.html">Complete Walkthrough</a>
+  </nav>
+  <button class="themebtn" id="tbtn" type="button">Dark</button>
+</div></div>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Document 1 of 5 &middot; System Design</div>
+  <h1>AWS System Architecture</h1>
+  <p class="lede">How an Indian stock price-forecasting platform is built on AWS — which service does what,
+  why each one was chosen, how data flows from the stock exchange to the screen, and what it costs.</p>
+  <div class="metaline">
+    <span><b>Version</b> 3.0</span> &middot;
+    <span><b>Date</b> 29 October 2026</span> &middot;
+    <span><b>Region</b> ap-south-1 (Mumbai)</span> &middot;
+    <span><b>Status</b> Proposed — for approval</span> &middot;
+    <span><b>Data provider</b> Upstox</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="lbl">How to read this document</span>
+  <p>No AWS knowledge is assumed. Every service is explained in plain words before it is used,
+  with a short note on <em>why that service and not another</em>. If you only have five minutes,
+  read <a href="#glance">Section 1</a> and <a href="#cost">Section 9</a>.</p>
+</div>
+
+<div class="note stop">
+  <span class="lbl">What this system does and does not do</span>
+  <p><b>It does:</b> collect stock market data, learn patterns from history, and show forecasts
+  on a private dashboard — an estimated closing price, an expected high and low, and a probability of gain.</p>
+  <p><b>It does not:</b> place orders, touch money, or give investment advice. There is no broker
+  connection for trading. This is a research and forecasting tool.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="glance"><span class="num">1</span>The system at a glance</h2>
+<p class="sub">Five stages, left to right. Data comes in, gets cleaned, a model makes a forecast,
+the forecast is checked for risk, and a person sees it on a web page.</p>
+
+<figure>
+<svg viewBox="0 0 980 560" role="img" aria-labelledby="t1 d1" xmlns="http://www.w3.org/2000/svg">
+  <title id="t1">End-to-end data flow for the StockAI platform</title>
+  <desc id="d1">Market data, news and macro indicators are collected by AWS services into an S3 data lake.
+  Features are engineered, four XGBoost models produce forecasts, a risk engine evaluates them,
+  results are stored in a database and shown on a React dashboard.</desc>
+
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7.5" refY="3.2" orient="auto">
+      <path d="M0,0 L7.5,3.2 L0,6.4 Z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <style>
+    .bx   { rx:9; stroke-width:1.5; }
+    .src  { fill:#e8f0f8; stroke:#2e6da4; }
+    .cmp  { fill:#fdf2e4; stroke:#d6700d; }
+    .sto  { fill:#e6f4ec; stroke:#1d7a4d; }
+    .mll  { fill:#f1ebf8; stroke:#6b3fa0; }
+    .ui   { fill:#eef2f6; stroke:#1f3a5f; }
+    .ttl  { font:600 12.5px -apple-system,Segoe UI,sans-serif; fill:#15202b; }
+    .sm   { font:10.5px -apple-system,Segoe UI,sans-serif; fill:#6b7785; }
+    .stg  { font:700 10px -apple-system,Segoe UI,sans-serif; fill:#929daa; letter-spacing:.09em; }
+    .fl   { stroke:#929daa; stroke-width:1.6; fill:none; color:#929daa; }
+    .band { fill:#f6f8fa; rx:8; }
+  </style>
+  <g id="dk"></g>
+
+  <!-- stage labels -->
+  <text class="stg" x="16" y="26">1 · COLLECT</text>
+  <text class="stg" x="16" y="152">2 · STORE</text>
+  <text class="stg" x="16" y="246">3 · PREPARE</text>
+  <text class="stg" x="16" y="326">4 · PREDICT</text>
+  <text class="stg" x="16" y="470">5 · SHOW</text>
+
+  <!-- stage 1: sources -->
+  <rect class="bx src" x="16"  y="36" width="208" height="56"/>
+  <text class="ttl" x="30" y="58">Upstox Market Data</text>
+  <text class="sm"  x="30" y="75">Live feed + OHLCV history</text>
+
+  <rect class="bx src" x="244" y="36" width="208" height="56"/>
+  <text class="ttl" x="258" y="58">News APIs</text>
+  <text class="sm"  x="258" y="75">Indian business headlines</text>
+
+  <rect class="bx src" x="472" y="36" width="208" height="56"/>
+  <text class="ttl" x="486" y="58">Macro Indicators</text>
+  <text class="sm"  x="486" y="75">Oil · gold · USD/INR · RBI</text>
+
+  <rect class="bx cmp" x="700" y="36" width="264" height="56"/>
+  <text class="ttl" x="714" y="58">EventBridge Scheduler</text>
+  <text class="sm"  x="714" y="75">Runs everything on a clock (IST)</text>
+
+  <!-- collectors -->
+  <rect class="bx cmp" x="16"  y="104" width="208" height="38"/>
+  <text class="ttl" x="30" y="128">ECS Fargate + Lambda</text>
+
+  <rect class="bx cmp" x="244" y="104" width="208" height="38"/>
+  <text class="ttl" x="258" y="128">Lambda + LLM extract</text>
+
+  <rect class="bx cmp" x="472" y="104" width="208" height="38"/>
+  <text class="ttl" x="486" y="128">Lambda fetch</text>
+
+  <!-- stage 2: lake -->
+  <rect class="bx sto" x="16" y="162" width="948" height="56"/>
+  <text class="ttl" x="30" y="184">Amazon S3 — Data Lake</text>
+  <text class="sm"  x="30" y="201">Every raw file kept, dated and versioned · Parquet format · the single source of truth</text>
+
+  <!-- stage 3 -->
+  <rect class="bx cmp" x="16" y="256" width="460" height="52"/>
+  <text class="ttl" x="30" y="277">AWS Glue — Feature Engineering</text>
+  <text class="sm"  x="30" y="294">Cleans prices, fixes splits, computes indicators</text>
+
+  <rect class="bx sto" x="496" y="256" width="468" height="52"/>
+  <text class="ttl" x="510" y="277">Glue Catalog + Athena</text>
+  <text class="sm"  x="510" y="294">Ask questions of the data with plain SQL</text>
+
+  <!-- stage 4: four models -->
+  <rect class="band" x="16" y="336" width="948" height="112"/>
+  <text class="stg" x="30" y="354">FOUR XGBOOST MODELS — ONE PER QUESTION</text>
+
+  <rect class="bx mll" x="30"  y="364" width="222" height="44"/>
+  <text class="ttl" x="42" y="383">Closing price</text>
+  <text class="sm"  x="42" y="398">Where it ends up</text>
+
+  <rect class="bx mll" x="266" y="364" width="222" height="44"/>
+  <text class="ttl" x="278" y="383">Highest price</text>
+  <text class="sm"  x="278" y="398">Best point in window</text>
+
+  <rect class="bx mll" x="502" y="364" width="222" height="44"/>
+  <text class="ttl" x="514" y="383">Lowest price</text>
+  <text class="sm"  x="514" y="398">Worst point in window</text>
+
+  <rect class="bx mll" x="738" y="364" width="212" height="44"/>
+  <text class="ttl" x="750" y="383">Gain probability</text>
+  <text class="sm"  x="750" y="398">Chance of finishing up</text>
+
+  <rect class="bx cmp" x="30" y="414" width="920" height="26"/>
+  <text class="ttl" x="42" y="431">Risk &amp; Opportunity Engine — checks the four answers agree, adds a No-Trade option</text>
+
+  <!-- stage 5 -->
+  <rect class="bx sto" x="16" y="478" width="300" height="52"/>
+  <text class="ttl" x="30" y="499">Aurora PostgreSQL</text>
+  <text class="sm"  x="30" y="516">Forecasts + outcomes, queryable</text>
+
+  <rect class="bx ui" x="336" y="478" width="300" height="52"/>
+  <text class="ttl" x="350" y="499">API Gateway + Lambda</text>
+  <text class="sm"  x="350" y="516">Cognito login protects every route</text>
+
+  <rect class="bx ui" x="656" y="478" width="308" height="52"/>
+  <text class="ttl" x="670" y="499">React Dashboard</text>
+  <text class="sm"  x="670" y="516">CloudFront · private, authenticated</text>
+
+  <!-- arrows -->
+  <g class="fl">
+    <path d="M120,92 L120,104" marker-end="url(#ar)"/>
+    <path d="M348,92 L348,104" marker-end="url(#ar)"/>
+    <path d="M576,92 L576,104" marker-end="url(#ar)"/>
+    <path d="M832,92 L832,120 L700,120" marker-end="url(#ar)"/>
+    <path d="M120,142 L120,162" marker-end="url(#ar)"/>
+    <path d="M348,142 L348,162" marker-end="url(#ar)"/>
+    <path d="M576,142 L576,162" marker-end="url(#ar)"/>
+    <path d="M246,218 L246,256" marker-end="url(#ar)"/>
+    <path d="M476,282 L496,282" marker-end="url(#ar)"/>
+    <path d="M246,308 L246,336" marker-end="url(#ar)"/>
+    <path d="M490,440 L490,462 L166,462 L166,478" marker-end="url(#ar)"/>
+    <path d="M316,504 L336,504" marker-end="url(#ar)"/>
+    <path d="M636,504 L656,504" marker-end="url(#ar)"/>
+  </g>
+</svg>
+<div class="legend">
+  <span><i style="background:#e8f0f8;border:1px solid #2e6da4"></i> Data source</span>
+  <span><i style="background:#fdf2e4;border:1px solid #d6700d"></i> Compute</span>
+  <span><i style="background:#e6f4ec;border:1px solid #1d7a4d"></i> Storage</span>
+  <span><i style="background:#f1ebf8;border:1px solid #6b3fa0"></i> Machine learning</span>
+  <span><i style="background:#eef2f6;border:1px solid #1f3a5f"></i> Interface</span>
+</div>
+<figcaption>Figure 1 — End-to-end flow. Data enters at the top, a forecast leaves at the bottom.</figcaption>
+</figure>
+
+<div class="plain">
+  <span class="lbl">In plain words</span>
+  <p>Think of it as a factory with five rooms. The <b>first room</b> receives raw material (stock prices,
+  news, oil and currency numbers). The <b>second</b> is a warehouse where every delivery is kept, labelled
+  with its date. The <b>third</b> is a workshop that cleans the material and turns it into measurements a
+  machine can read. The <b>fourth</b> is where four specialists each answer one question about the future.
+  The <b>fifth</b> is the shop window where a person sees the result.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="services"><span class="num">2</span>Every AWS service, explained</h2>
+<p class="sub">AWS sells about 240 services. This system uses 18. Each card says what the service is,
+what it does here, and why it was picked over the alternative.</p>
+
+<h3>2.1 Getting data in</h3>
+<div class="svcgrid">
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon EventBridge Scheduler</span><span class="svc-tag">Scheduling</span></div>
+    <p class="svc-what">An alarm clock for the cloud.</p>
+    <p class="svc-use">Starts every scheduled job at the right Indian time — fetch candles at 16:00,
+    run the forecast at 08:30, retrain on Sunday night.</p>
+    <p class="svc-why"><b>Why this:</b> it understands time zones natively, so schedules are written
+    as "08:30 Asia/Kolkata" instead of doing UTC arithmetic by hand and getting it wrong twice a year.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">AWS Lambda</span><span class="svc-tag">Compute</span></div>
+    <p class="svc-what">Runs a small piece of code on demand, then disappears.</p>
+    <p class="svc-use">Fetches historical candles, downloads news, serves dashboard API requests.
+    Roughly 12 separate functions.</p>
+    <p class="svc-why"><b>Why this:</b> you pay per millisecond of execution. These jobs run for seconds
+    a day, so a permanently running server would be idle 99.9% of the time.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon ECS Fargate</span><span class="svc-tag">Compute</span></div>
+    <p class="svc-what">Runs a container for as long as you need, without managing a server.</p>
+    <p class="svc-use">Holds the live WebSocket connection to Upstox for the whole trading session,
+    decodes the binary Protobuf messages, and also runs model training.</p>
+    <p class="svc-why"><b>Why not Lambda:</b> Lambda stops after 15 minutes. The market is open for
+    6 hours 15 minutes. Lambda physically cannot hold this connection — this is a hard limit, not a preference.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon S3</span><span class="svc-tag">Storage</span></div>
+    <p class="svc-what">Unlimited file storage. Cheap, durable, never full.</p>
+    <p class="svc-use">The data lake. Every raw download, every cleaned dataset, every trained model
+    and every evaluation report, each stamped with its date.</p>
+    <p class="svc-why"><b>Why this:</b> about ₹2 per GB per month, and it keeps 11 nines of durability.
+    It is the memory of the system — if everything else is deleted, S3 can rebuild it.</p>
+  </div>
+
+</div>
+
+<h3>2.2 Preparing the data</h3>
+<div class="svcgrid">
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">AWS Glue</span><span class="svc-tag">ETL</span></div>
+    <p class="svc-what">A managed data-cleaning engine (Apache Spark underneath).</p>
+    <p class="svc-use">Adjusts prices for stock splits and bonuses, computes all technical indicators,
+    joins news and macro features onto the right dates, and runs the data-quality checks.</p>
+    <p class="svc-why"><b>Why this:</b> rolling calculations over five years of data for 50 stocks is
+    genuinely a Spark-sized job. Glue gives Spark without a cluster to run.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon Athena</span><span class="svc-tag">Query</span></div>
+    <p class="svc-what">Run SQL directly on files in S3. No database to load first.</p>
+    <p class="svc-use">Investigating data problems, checking for gaps, and ad-hoc research questions
+    like "show me every day RELIANCE moved more than 5%".</p>
+    <p class="svc-why"><b>Why this:</b> pay per query (about ₹400 per terabyte scanned). The alternative,
+    a data warehouse, charges by the hour whether you query it or not.</p>
+  </div>
+
+</div>
+
+<h3>2.3 Making the forecast</h3>
+<div class="svcgrid">
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">SageMaker Training Job</span><span class="svc-tag">ML</span></div>
+    <p class="svc-what">A managed machine that starts, runs a training script, saves the result and shuts down.</p>
+    <p class="svc-use">Trains the four XGBoost models every Sunday at 02:00. About 5 minutes, roughly $0.50 a run.</p>
+    <p class="svc-why"><b>Why this and not a plain container:</b> it gives model versioning, lineage and a
+    registry without extra code &mdash; and you pay only for the minutes it runs.
+    <a href="#sagemaker">Section 4.3</a> covers the choice in full.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">SageMaker Batch Transform</span><span class="svc-tag">ML</span></div>
+    <p class="svc-what">Loads saved models, scores a batch of rows, writes the answers, shuts down.</p>
+    <p class="svc-use">Runs the daily forecast at 08:30 &mdash; 50 rows in, 200 numbers out, about 3 minutes.</p>
+    <p class="svc-why"><b>Why not a real-time endpoint:</b> an endpoint bills 24 hours a day for a job
+    that runs once. Batch Transform bills only the 3 minutes &mdash; about $3/month for both jobs together, against ~$145 for an idle endpoint.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Risk &amp; Opportunity Engine</span><span class="svc-tag">Our code</span></div>
+    <p class="svc-what">Not an AWS service — plain Python running in Lambda.</p>
+    <p class="svc-use">Checks the four forecasts agree with each other, measures how uncertain they are,
+    and can return <b>No Trade</b> when the answer is not trustworthy.</p>
+    <p class="svc-why"><b>Why separate:</b> keeping it out of the models means risk rules can change
+    without retraining anything.</p>
+  </div>
+
+</div>
+
+<h3>2.4 Storing and showing results</h3>
+<div class="svcgrid">
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon Aurora PostgreSQL</span><span class="svc-tag">Database</span></div>
+    <p class="svc-what">A managed PostgreSQL database that AWS keeps running and backed up.</p>
+    <p class="svc-use">Stores every forecast, what actually happened afterwards, model versions,
+    user accounts and saved watchlists.</p>
+    <p class="svc-why"><b>Why a real database:</b> the dashboard asks relational questions — "accuracy
+    for banking stocks last quarter, by model version". That is SQL's job. Use <b>Serverless v2</b>
+    so it scales down when nobody is looking.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon API Gateway</span><span class="svc-tag">API</span></div>
+    <p class="svc-what">The front door for the dashboard's requests.</p>
+    <p class="svc-use">Publishes about 6 REST routes, checks the login token on each one,
+    and limits how fast anyone can call them.</p>
+    <p class="svc-why"><b>Why this:</b> authentication, rate limiting and request validation come built in.
+    Writing those by hand is a week of work and a security risk.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon Cognito</span><span class="svc-tag">Identity</span></div>
+    <p class="svc-what">Manages who can log in.</p>
+    <p class="svc-use">Email and password plus an authenticator app code. Only invited users exist —
+    there is no public sign-up.</p>
+    <p class="svc-why"><b>Why this:</b> storing passwords safely is easy to get wrong. Cognito handles
+    hashing, resets, sessions and MFA as a managed service.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon CloudFront + S3</span><span class="svc-tag">Hosting</span></div>
+    <p class="svc-what">A global delivery network in front of static files.</p>
+    <p class="svc-use">Serves the React dashboard with HTTPS from a location near the user.</p>
+    <p class="svc-why"><b>Why this:</b> the dashboard is a folder of files. Putting it on a web server
+    would mean patching that server forever.</p>
+  </div>
+
+</div>
+
+<h3>2.5 Security and keeping it running</h3>
+<div class="svcgrid">
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">AWS Secrets Manager</span><span class="svc-tag">Security</span></div>
+    <p class="svc-what">An encrypted vault for passwords and API keys.</p>
+    <p class="svc-use">Holds the Upstox Analytics Token, the news provider key and the LLM key.
+    Code reads them at runtime; they never appear in source control.</p>
+    <p class="svc-why"><b>Why this:</b> it records who read which secret and when, and can alert
+    before the Upstox token's one-year expiry.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">AWS IAM</span><span class="svc-tag">Security</span></div>
+    <p class="svc-what">Decides which part of the system may do what.</p>
+    <p class="svc-use">Each Lambda gets its own role with the narrowest possible permission —
+    the news fetcher cannot read the forecast database.</p>
+    <p class="svc-why"><b>Why it matters:</b> if one component is ever compromised, the damage stops
+    at that component's permissions.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">Amazon CloudWatch</span><span class="svc-tag">Monitoring</span></div>
+    <p class="svc-what">Collects logs, measurements and alarms.</p>
+    <p class="svc-use">Alerts when the live feed goes quiet, a day's candles are missing,
+    forecast accuracy drops, or spend exceeds budget.</p>
+    <p class="svc-why"><b>Why it matters:</b> a data pipeline that fails silently produces wrong
+    forecasts that look perfectly normal. Alarms are how you find out on day one, not day thirty.</p>
+  </div>
+
+  <div class="svc">
+    <div class="svc-head"><span class="svc-name">AWS CDK</span><span class="svc-tag">Deployment</span></div>
+    <p class="svc-what">Describes the whole cloud setup as code.</p>
+    <p class="svc-use">Every service above is defined in TypeScript, in Git. Deploying is one command.</p>
+    <p class="svc-why"><b>Why it matters:</b> the system can be rebuilt from scratch in a fresh AWS
+    account in under an hour, and every change is reviewable.</p>
+  </div>
+
+</div>
+
+<div class="note ok">
+  <span class="lbl">Services deliberately NOT used</span>
+  <p>Leaving things out is also a design decision. <b>No NAT Gateway</b> (~$35/mo) — the Upstox
+  Analytics Token needs no static IP for market data, so no private networking is required.
+  <b>No ElastiCache</b> — Aurora answers in milliseconds for a handful of users.
+  <b>No SageMaker real-time endpoints</b> — forecasting runs once a day, so a 24/7 endpoint would be idle
+  99.8% of the time. SageMaker Training and Batch Transform <em>are</em> used; only the always-on endpoint is avoided.
+  <b>No Kinesis</b> — the live feed goes straight from Fargate to the dashboard; there is no need to
+  store every tick. Together these omissions save roughly <b>$200/month</b>.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="day"><span class="num">3</span>A day in the life of the system</h2>
+<p class="sub">What actually happens, hour by hour, on a normal trading day.</p>
+
+<ol class="steps">
+  <li><span class="st">07:30 — Wake up and check the instrument list</span>
+    <span class="sd">Downloads the daily Upstox instrument file so every stock's identifier is current.
+    Identifiers change; hard-coding them silently fetches the wrong stock's data.</span>
+    <span class="sv">EventBridge → Lambda → S3</span></li>
+
+  <li><span class="st">08:00 — Collect news and macro data</span>
+    <span class="sd">Pulls overnight business headlines and the latest oil, gold and USD/INR values.
+    An LLM converts each article into structured numbers: sentiment, event type, companies affected.
+    The original publication time is kept so the model can never see news from the future.</span>
+    <span class="sv">Lambda → SQS → Lambda + LLM → S3</span></li>
+
+  <li><span class="st">08:10 — Build the features</span>
+    <span class="sd">Glue adjusts for any corporate action, computes the technical indicators,
+    joins yesterday's news and macro features, and runs 14 data-quality checks.
+    If a check fails, the pipeline stops here rather than forecasting on bad data.</span>
+    <span class="sv">AWS Glue → S3</span></li>
+
+  <li><span class="st">08:30 — Make the forecast</span>
+    <span class="sd">The four models each answer their question for every stock.
+    The Risk Engine checks the answers are coherent — low must be below high, close must sit between them —
+    and assigns a risk score or returns No&nbsp;Trade.</span>
+    <span class="sv">Fargate → Lambda → Aurora</span></li>
+
+  <li><span class="st">09:15 — Market opens, live prices start</span>
+    <span class="sd">A Fargate container connects to the Upstox WebSocket and decodes the binary feed.
+    Prices stream to the dashboard. Individual ticks are not written to the database —
+    that would be millions of pointless writes per day.</span>
+    <span class="sv">ECS Fargate → WebSocket → Dashboard</span></li>
+
+  <li><span class="st">15:30 — Market closes</span>
+    <span class="sd">The streaming container shuts itself down. Nothing runs, nothing is billed.</span>
+    <span class="sv">EventBridge stops the task</span></li>
+
+  <li><span class="st">16:00 — Record what actually happened</span>
+    <span class="sd">Downloads the day's official candles and compares them against forecasts whose
+    horizon has now matured. This is the scoreboard: was the estimate right?</span>
+    <span class="sv">Lambda → S3 → Aurora</span></li>
+
+  <li><span class="st">Sunday 02:00 — Retrain</span>
+    <span class="sd">All four models retrain on data including the past week, are tested against
+    simple baselines, and are only promoted if they beat them. If they do not, last week's models stay.</span>
+    <span class="sv">Fargate → S3 → model registry</span></li>
+</ol>
+
+<!-- ===================================================================== -->
+<h2 id="decisions"><span class="num">4</span>The decisions worth explaining</h2>
+
+<h3 id="broker">4.1 Why Upstox and not Zerodha</h3>
+<p>Both are reputable Indian brokers with developer APIs. For <em>this</em> system — which only reads
+data and never places an order — Upstox is clearly better. The detail is in
+<a href="upstox-feasibility.html">Document 3</a>; the summary:</p>
+
+<div class="vs">
+  <div class="vscard win">
+    <header>Upstox Analytics Token <span class="pill ok">Chosen</span></header>
+    <ul>
+      <li><b>Free</b> — ₹0 per month, confirmed in the official documentation</li>
+      <li><b>Valid one year</b> — generated once, not daily</li>
+      <li><b>No static IP needed</b> for market data, history or WebSocket</li>
+      <li>Daily candles back to <b>January 2000</b>; 10 years per request</li>
+      <li>Read-only by design — it <em>cannot</em> place an order even by mistake</li>
+    </ul>
+  </div>
+  <div class="vscard lose">
+    <header>Zerodha Kite Connect <span class="pill warn">Not chosen</span></header>
+    <ul>
+      <li><b>₹500/month</b> — market data is not in the free tier</li>
+      <li><b>Token expires daily</b> and renewal needs an interactive login with 2FA —
+      it cannot be fully automated</li>
+      <li>Static IP required for orders, forcing a <b>NAT Gateway (~$35/mo)</b></li>
+      <li>Trading-capable credentials in a system that should never trade</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note ok">
+  <span class="lbl">The decisive point</span>
+  <p>The Zerodha token must be regenerated every morning through a browser login with two-factor
+  authentication. That is a person doing a manual step before 08:30, every single working day, forever.
+  The Upstox token lasts a year. For a system that runs unattended, this difference matters more
+  than the ₹500.</p>
+</div>
+
+<h3 id="aurora">4.2 Why a database as well as S3</h3>
+<p>They do different jobs and the distinction is worth being clear about.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Question</th><th>Amazon S3</th><th>Aurora PostgreSQL</th></tr></thead>
+<tbody>
+<tr><td>What it holds</td><td>Files — raw downloads, datasets, trained models</td><td>Rows — forecasts, outcomes, users</td></tr>
+<tr><td>Good at</td><td>Storing enormous amounts cheaply, forever</td><td>Answering precise questions instantly</td></tr>
+<tr><td>Typical question</td><td>"Give me the January 2024 training set"</td><td>"Which forecasts beat their baseline last month?"</td></tr>
+<tr><td>Cost shape</td><td>~₹2 per GB per month</td><td>Per hour of capacity used</td></tr>
+<tr><td>Analogy</td><td>The warehouse</td><td>The order book on the desk</td></tr>
+</tbody></table></div>
+<p>Putting forecasts only in S3 would mean scanning files to answer a dashboard query.
+Putting training data in Aurora would cost many times more and be slower for bulk reads.</p>
+
+<h3 id="sagemaker">4.3 How SageMaker is used — and how it is not</h3>
+<p>SageMaker is AWS's managed machine-learning platform. This system uses <b>two parts of it</b>
+and deliberately avoids a third.</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>Part</th><th>Used?</th><th>What it does here</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td><b>Training Job</b></td><td>Yes</td><td>Fits the four models weekly, then shuts down</td><td>~$1/mo</td></tr>
+<tr><td><b>Batch Transform</b></td><td>Yes</td><td>Scores 50 rows daily in ~3 min, then shuts down</td><td>~$2/mo</td></tr>
+<tr><td><b>Real-time endpoint</b></td><td><b>No</b></td><td>A server held ready 24/7 for instant answers</td><td>~$145/mo</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The distinction matters. A <b>real-time endpoint</b> is what most SageMaker tutorials show, and it is
+the wrong shape for this system: the forecast runs <em>once a day</em>, so an always-on endpoint would sit
+idle 99.8% of the time and still bill for it. <b>Batch Transform</b> does the identical scoring work,
+bills only the three minutes it runs, and costs about a thirteenth as much.</p>
+
+<p><b>Why SageMaker rather than a plain container:</b> the training itself is small enough to run anywhere —
+XGBoost on 50 stocks × 5 years fits in minutes on an ordinary CPU, with no GPU needed. What SageMaker adds
+is the surrounding discipline: every training run is versioned, every model file is traceable to the exact
+data and code that produced it, and promotion from "trained" to "live" is an explicit, recorded step.
+For a forecasting system that must be auditable, that bookkeeping is the point &mdash; and it arrives
+without writing any of it ourselves.</p>
+
+<p><b>What would change the answer:</b> if inference were ever needed on demand rather than once a morning,
+the real-time endpoint becomes correct despite the cost. Nothing in the current design points that way.</p>
+
+<h3>4.4 Why four separate models</h3>
+<p>Each question has a different shape, so each gets its own model. Section 2 of
+<a href="prediction-engine.html">Document 2</a> covers this in full, but briefly: the highest price
+over five days is a maximum of five numbers, which behaves differently from an average;
+and a probability must be <em>calibrated</em>, which is a different training objective entirely.
+One model forced to answer all four questions answers all of them worse.</p>
+
+<!-- ===================================================================== -->
+<h2 id="data"><span class="num">5</span>What gets stored, and where</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Store</th><th>Contents</th><th>Retention</th><th>Why there</th></tr></thead>
+<tbody>
+<tr><td><b>S3 — raw</b></td><td>Exactly what each provider returned, unmodified</td><td>Indefinite</td><td>Lets any past result be reproduced</td></tr>
+<tr><td><b>S3 — curated</b></td><td>Cleaned prices, engineered features, labels</td><td>Indefinite</td><td>Training input, partitioned by date</td></tr>
+<tr><td><b>S3 — models</b></td><td>Trained models, metrics, evaluation reports</td><td>Indefinite</td><td>Any forecast traces to the exact model that made it</td></tr>
+<tr><td><b>Aurora</b></td><td>Forecasts, actual outcomes, users, watchlists</td><td>Rolling 3 years</td><td>Fast, precise queries for the dashboard</td></tr>
+<tr><td><b>Secrets Manager</b></td><td>Upstox token, news key, LLM key</td><td>Until rotated</td><td>Encrypted; never in code or logs</td></tr>
+<tr><td><b>Nowhere (in memory)</b></td><td>Live tick prices</td><td>Seconds</td><td>Writing millions of ticks per day has no analytical value here</td></tr>
+</tbody></table></div>
+
+<div class="note warn">
+  <span class="lbl">The two data problems that break forecasting systems</span>
+  <p><b>1. Corporate actions.</b> When a stock splits 1-for-5, the price drops 80% overnight.
+  To a naive pipeline that looks like an 80% crash and poisons every calculation that touches
+  that date — for a 200-day average, that is 200 subsequent days. Prices must be split-adjusted,
+  and any single-day move above 25% is automatically flagged for review.</p>
+  <p><b>2. Point-in-time correctness.</b> A model must only ever see what was genuinely knowable
+  on that date. News carries its publication timestamp, not its ingestion timestamp. This sounds
+  obvious and is violated constantly — it is the main reason backtests look brilliant and live
+  performance does not.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="api"><span class="num">6</span>What the dashboard asks for</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Route</th><th>Returns</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td><code>GET /stocks/{id}/candles</code></td><td>Price history for the chart</td><td>Upstox, cached</td></tr>
+<tr><td><code>GET /stocks/{id}/forecast</code></td><td>Close, high, low, gain probability, risk score, horizon, model version</td><td>Aurora</td></tr>
+<tr><td><code>GET /forecasts</code></td><td>Today's forecasts across the watchlist</td><td>Aurora</td></tr>
+<tr><td><code>GET /models/performance</code></td><td>Accuracy vs baselines, calibration charts</td><td>Aurora</td></tr>
+<tr><td><code>GET /news/events</code></td><td>Recent news features and their sources</td><td>Aurora</td></tr>
+<tr><td><code>GET /stocks/{id}/history</code></td><td>Past forecasts vs what actually happened</td><td>Aurora</td></tr>
+</tbody></table></div>
+<p>Every route requires a valid Cognito login. There is no public, unauthenticated endpoint —
+a deliberate choice, explained next.</p>
+
+<!-- ===================================================================== -->
+<h2 id="security"><span class="num">7</span>Security and access</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Area</th><th>Control</th></tr></thead>
+<tbody>
+<tr><td>Who can log in</td><td>Cognito, invite-only, authenticator-app MFA required</td></tr>
+<tr><td>API access</td><td>Every route validates a login token; rate-limited per user</td></tr>
+<tr><td>Secrets</td><td>Secrets Manager only; a CI check fails the build if a key appears in code</td></tr>
+<tr><td>Permissions</td><td>One IAM role per function, scoped to named resources</td></tr>
+<tr><td>Encryption</td><td>On by default everywhere, at rest and in transit</td></tr>
+<tr><td>Database exposure</td><td>Aurora has no public address; reachable only from inside the VPC</td></tr>
+<tr><td>Audit</td><td>CloudTrail records every API call in the account</td></tr>
+<tr><td>Data display</td><td>Private dashboard only — see the warning below</td></tr>
+</tbody></table></div>
+
+<div class="note stop">
+  <span class="lbl">Open question — must be resolved before any public launch</span>
+  <p>Exchange data carries redistribution restrictions. Having free API access is <b>not</b> the same
+  as having the right to display that data publicly or to store it indefinitely for model training.</p>
+  <p>Keeping the dashboard private and invite-only avoids the question for a research MVP.
+  Before showing this to anyone outside the company, written clarification is needed from
+  Upstox and/or the exchange on three points: <b>storage</b> (how long may data be retained),
+  <b>training</b> (may it be used to train models), and <b>display</b> (who may see it).</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="build"><span class="num">8</span>Build sequence</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Stage</th><th>What gets built</th><th>Done when</th></tr></thead>
+<tbody>
+<tr><td><b>1</b></td><td>Upstox token; fetch historical candles into S3</td><td>5 years of data for 50 stocks, no gaps</td></tr>
+<tr><td><b>2</b></td><td>Feature pipeline in Glue; quality checks</td><td>Reruns produce identical output; splits handled</td></tr>
+<tr><td><b>3</b></td><td>Baselines first, then the four models</td><td>Every model measured against a baseline</td></tr>
+<tr><td><b>4</b></td><td>Risk engine; forecast consistency checks</td><td>Incoherent forecasts are caught, not shown</td></tr>
+<tr><td><b>5</b></td><td>Aurora, API Gateway, Cognito</td><td>Forecasts queryable through an authenticated API</td></tr>
+<tr><td><b>6</b></td><td>React dashboard on CloudFront</td><td>A person can log in and read a forecast</td></tr>
+<tr><td><b>7</b></td><td>Live feed on Fargate</td><td>Survives a disconnect and resubscribes</td></tr>
+<tr><td><b>8</b></td><td>Alarms, dashboards, runbooks</td><td>Failures page someone instead of passing silently</td></tr>
+</tbody></table></div>
+
+<div class="note">
+  <span class="lbl">Why baselines come before models (stage 3)</span>
+  <p>A baseline is a deliberately stupid prediction — "tomorrow's price equals today's". If a
+  sophisticated model cannot beat it, the model is worthless no matter how impressive its accuracy
+  number looks. Building baselines first means there is always something honest to compare against,
+  and it is the single cheapest protection against fooling yourself.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="cost"><span class="num">9</span>What it costs</h2>
+<p class="sub">Mumbai region, 50 stocks, a handful of users. Directional estimates for planning —
+confirm in the AWS Pricing Calculator before quoting externally.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Service</th><th>Why it costs this</th><th>USD / month</th></tr></thead>
+<tbody>
+<tr><td>Aurora Serverless v2</td><td>Smallest capacity, scales down when idle</td><td>~45</td></tr>
+<tr><td>ECS Fargate</td><td>~140 h live feed during market hours</td><td>~9</td></tr>
+<tr><td>SageMaker Batch Transform</td><td>Daily forecast, ~3 min per run</td><td>~2</td></tr>
+<tr><td>SageMaker Training</td><td>Weekly retrain, ~5 min per run</td><td>~1</td></tr>
+<tr><td>AWS Glue</td><td>2 units × ~0.4 h/day</td><td>~8</td></tr>
+<tr><td>CloudWatch</td><td>Logs, metrics, alarms, dashboards</td><td>~10</td></tr>
+<tr><td>LLM API (news extraction)</td><td>~200 articles/day, small model</td><td>~8</td></tr>
+<tr><td>News data provider</td><td>Entry tier <span class="pill warn">varies widely</span></td><td>~25</td></tr>
+<tr><td>Amazon S3</td><td>~60 GB with lifecycle rules</td><td>~3</td></tr>
+<tr><td>AWS Lambda</td><td>~60k invocations, mostly sub-second</td><td>~2</td></tr>
+<tr><td>API Gateway + CloudFront</td><td>Low traffic</td><td>~3</td></tr>
+<tr><td>Cognito</td><td>Under 50 users — free tier</td><td>0</td></tr>
+<tr><td>Secrets Manager + KMS</td><td>3 secrets, 2 keys</td><td>~4</td></tr>
+<tr><td>Athena</td><td>Occasional investigation queries</td><td>~1</td></tr>
+<tr><td><b>Upstox market data</b></td><td><b>Analytics Token — free</b></td><td><b>0</b></td></tr>
+<tr style="border-top:2px solid var(--brand)"><td><b>Total</b></td><td>≈ ₹10,000 per month</td><td><b>~121</b></td></tr>
+</tbody></table></div>
+
+<div class="note ok">
+  <span class="lbl">Where the savings came from</span>
+  <p>An earlier draft of this architecture came to roughly <b>$375/month</b>. Four changes removed
+  about <b>$200</b> of that with no loss of capability: batch forecasting instead of a 24/7 SageMaker
+  endpoint (−$144), no ElastiCache (−$25), weekly instead of daily retraining (−$25),
+  and choosing Upstox, which removes both the ₹500 fee and the NAT Gateway (−$41).</p>
+</div>
+
+<h3>Biggest cost, and how to cut it</h3>
+<p>Aurora at ~$45 is the largest single line. If the budget needs to be tighter, forecasts could be
+served from DynamoDB or even S3 and the database dropped entirely — saving about $45 at the cost of
+flexible SQL reporting. That is a reasonable trade for a pure MVP, and a poor one once model-performance
+analysis becomes a regular activity. The recommendation is to keep Aurora.</p>
+
+<!-- ===================================================================== -->
+<h2 id="risks"><span class="num">10</span>Honest risks</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Risk</th><th>Likelihood</th><th>What we do about it</th></tr></thead>
+<tbody>
+<tr><td><b>The models show no real edge</b></td><td><span class="pill warn">High</span></td><td>Expected and planned for. Markets are close to efficient. Measuring honestly and reporting "no edge found" is a valid, valuable outcome — far better than shipping a model that only looked good.</td></tr>
+<tr><td><b>Data leakage inflates accuracy</b></td><td><span class="pill warn">Medium</span></td><td>The classic trap. Guarded by strict point-in-time rules and a shuffled-label test: train on random labels, and if accuracy survives, there is leakage.</td></tr>
+<tr><td>Corporate actions mishandled</td><td><span class="pill warn">Medium</span></td><td>Split adjustment plus an automatic flag on any single-day move above 25%</td></tr>
+<tr><td>Data rights unclear</td><td><span class="pill stop">Open</span></td><td>Private dashboard only until written clarification is obtained</td></tr>
+<tr><td>News provider quality or cost</td><td><span class="pill warn">Medium</span></td><td>Build price-only first; news must <em>prove</em> it adds value before it is kept</td></tr>
+<tr><td>Upstox token expiry</td><td><span class="pill ok">Low</span></td><td>One year; alarm at 11 months</td></tr>
+<tr><td>Live feed disconnects</td><td><span class="pill ok">Low</span></td><td>Automatic reconnect; gaps backfilled from the candle API</td></tr>
+<tr><td>Cost overrun</td><td><span class="pill ok">Low</span></td><td>Budget alerts at 80% and 100%; anomaly detection on</td></tr>
+</tbody></table></div>
+
+<div class="note stop">
+  <span class="lbl">The one thing to be clear about with any audience</span>
+  <p>Realistic accuracy for next-day direction on liquid large-cap equities is roughly <b>52–56%</b>.
+  Published claims of 95%+ accuracy almost always come from measuring the wrong thing — usually
+  predicting the <em>price level</em> rather than the <em>change</em>, which scores beautifully while
+  predicting nothing useful.</p>
+  <p>If this system ever reports above 60% on unseen data, the correct response is to look for a bug,
+  not to celebrate. That rule is built into the model promotion gate.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="next"><span class="num">11</span>Decisions needed to start</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>Decision</th><th>Recommendation</th><th>Blocks</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Upstox account and Analytics Token</td><td>Create now — it is free and takes an hour</td><td>Everything</td></tr>
+<tr><td>2</td><td>How many stocks</td><td>Start with 50 (NIFTY 50)</td><td>Cost, timeline</td></tr>
+<tr><td>3</td><td>Forecast horizon</td><td>Both 1-day and 5-day; 5-day is the more defensible</td><td>Model design</td></tr>
+<tr><td>4</td><td>News provider</td><td>Defer — prove the price-only model first</td><td>Stage 3</td></tr>
+<tr><td>5</td><td>Dashboard audience</td><td>Internal only until data rights are confirmed in writing</td><td>Compliance</td></tr>
+<tr><td>6</td><td>Monthly budget ceiling</td><td>$150 covers the design above with headroom</td><td>Service choices</td></tr>
+</tbody></table></div>
+
+<div class="footer">
+  <span>StockAI — AWS System Architecture v3.0 · 29 October 2026</span>
+  <span>Proposed design · Not approved for production · No investment advice</span>
+</div>
+
+</div>
+
+<script>
+(function () {
+  var r = document.documentElement, b = document.getElementById('tbtn');
+  var saved = null;
+  try { saved = localStorage.getItem('sa-theme-v2'); } catch (e) {}
+  var cur = saved || 'light';
+  apply(cur);
+  b.addEventListener('click', function () {
+    cur = cur === 'dark' ? 'light' : 'dark';
+    apply(cur);
+    try { localStorage.setItem('sa-theme-v2', cur); } catch (e) {}
+  });
+  function apply(t) {
+    r.setAttribute('data-theme', t);
+    b.textContent = t === 'dark' ? 'Light' : 'Dark';
+    var g = document.getElementById('dk');
+    if (g) {
+      g.innerHTML = t === 'dark'
+        ? '<style>.src{fill:#1a2836;stroke:#6ba3d8}.cmp{fill:#2a2015;stroke:#f0a050}' +
+          '.sto{fill:#152a1f;stroke:#5cc78e}.mll{fill:#241c33;stroke:#b391dd}' +
+          '.ui{fill:#1c252e;stroke:#8fb8e0}.ttl{fill:#e6ecf2}.sm{fill:#94a2b1}' +
+          '.stg{fill:#74828f}.band{fill:#171f27}.fl{stroke:#5a6773;color:#5a6773}</style>'
+        : '';
+    }
+  }
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prediction Engine</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div class="topbar"><div class="topbar-in">
+  <div class="brand">StockAI <span>/ Architecture</span></div>
+  <nav class="navlinks">
+    <a href="index.html">System Architecture</a>
+    <a href="flow.html">Flow Map</a>
+    <a href="prediction-engine.html" class="on">Prediction Engine</a>
+    <a href="upstox-feasibility.html">Upstox Feasibility</a>
+    <a href="complete-walkthrough.html">Complete Walkthrough</a>
+  </nav>
+  <button class="themebtn" id="tbtn" type="button">Dark</button>
+</div></div>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Document 3 of 5 &middot; Machine Learning</div>
+  <h1>How the Prediction Works</h1>
+  <p class="lede">What the system forecasts, how it learns, how we test whether it learned anything real,
+  and why the honest answer to "how accurate is it?" is a much smaller number than you might expect.</p>
+  <div class="metaline">
+    <span><b>Version</b> 3.0</span> &middot;
+    <span><b>Date</b> 29 October 2026</span> &middot;
+    <span><b>Models</b> 4 × XGBoost + risk engine</span> &middot;
+    <span><b>Horizons</b> 1 and 5 trading days</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="lbl">Who this is for</span>
+  <p>Anyone who needs to understand or approve this system. No machine-learning background assumed.
+  Technical specifics are in boxes you can skip without losing the thread.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="what"><span class="num">1</span>What the system actually predicts</h2>
+<p class="sub">Four separate questions about a stock over the next N trading days, plus a fifth
+step that decides whether to trust the answers at all.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>Question</th><th>Output</th><th>Honest difficulty</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>1</b></td>
+  <td>Where will the price close?</td>
+  <td>An estimated closing price in rupees, with a range</td>
+  <td><span class="pill stop">Very hard</span></td>
+</tr>
+<tr>
+  <td><b>2</b></td>
+  <td>What is the highest it will reach?</td>
+  <td>Estimated maximum price in the window</td>
+  <td><span class="pill stop">Very hard</span></td>
+</tr>
+<tr>
+  <td><b>3</b></td>
+  <td>What is the lowest it will fall to?</td>
+  <td>Estimated minimum price in the window</td>
+  <td><span class="pill stop">Very hard</span></td>
+</tr>
+<tr>
+  <td><b>4</b></td>
+  <td>What is the chance it ends higher than today?</td>
+  <td>A calibrated probability, e.g. 58%</td>
+  <td><span class="pill warn">Hard, but measurable</span></td>
+</tr>
+<tr>
+  <td><b>5</b></td>
+  <td>Should we trust these four answers?</td>
+  <td>A risk score, or <b>No Trade</b></td>
+  <td><span class="pill ok">Tractable</span></td>
+</tr>
+</tbody></table></div>
+
+<div class="plain">
+  <span class="lbl">In plain words</span>
+  <p>Imagine asking four analysts about one stock. The first guesses the closing price. The second
+  guesses the best it will touch. The third guesses the worst. The fourth does not guess a price at all —
+  they only say how confident they are that it finishes up. Then a supervisor checks whether the four
+  stories are consistent and whether anyone sounds like they are inventing it. That supervisor is
+  question 5, and it is the most practically useful part of the system.</p>
+</div>
+
+<div class="note warn">
+  <span class="lbl">What "estimated maximum" does not mean</span>
+  <p>It is <b>not</b> a ceiling, a guarantee, or a promise the price will not exceed it. It is the model's
+  best estimate of a typical high, and it will be wrong regularly — by design, roughly as often as it is right
+  in either direction. Every number shown on screen carries its horizon, its uncertainty range,
+  the model version and the time it was generated. A forecast without those four things is a rumour.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="why-four"><span class="num">2</span>Why four models instead of one</h2>
+<p>A reasonable question: why not one model that outputs everything? Because the four questions are
+mathematically different shapes, and a single model forced to answer all four answers each one worse.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Question</th><th>What it really is</th><th>Right tool</th></tr></thead>
+<tbody>
+<tr><td>Closing price</td><td>Predicting one number near the middle of a distribution</td><td>Regression on returns</td></tr>
+<tr><td>Highest price</td><td>Predicting the <b>maximum</b> of five numbers — extreme-value behaviour, systematically skewed upward</td><td>Separate regression with its own target</td></tr>
+<tr><td>Lowest price</td><td>The <b>minimum</b> of five numbers — skewed the other way</td><td>Separate regression</td></tr>
+<tr><td>Gain probability</td><td>Not a price at all. A probability that must be <b>calibrated</b>: when it says 60%, it must be right 60% of the time</td><td>Classification with calibration</td></tr>
+</tbody></table></div>
+
+<div class="plain">
+  <span class="lbl">Why the high/low distinction matters</span>
+  <p>Over five days, the <em>average</em> price and the <em>highest</em> price behave very differently.
+  The average tends to sit near today's price. The maximum is almost always above it — simply because
+  taking the largest of five random numbers pulls upward. A model trained to predict the average will
+  consistently guess the maximum too low. Giving the maximum its own model and its own training target
+  fixes this.</p>
+</div>
+
+<h3>Keeping the four answers coherent</h3>
+<p>Four independent models can contradict each other — predicting a low of ₹2,400, a high of ₹2,380
+and a close of ₹2,500 is nonsense. A consistency check runs on every forecast:</p>
+<pre><code>predicted_low  ≤  predicted_close  ≤  predicted_high
+predicted_low  ≤  current_price    ≤  predicted_high   (usually; flagged if not)
+predicted_high − predicted_low     ≥  typical daily range</code></pre>
+<p>A forecast failing these checks is <b>not shown</b>. It is logged, flagged, and the stock returns
+<b>No Trade</b> for that day. Contradiction is a signal that the models are uncertain, and that is
+information worth surfacing rather than hiding.</p>
+
+<!-- ===================================================================== -->
+<h2 id="pipeline"><span class="num">3</span>From raw prices to a forecast</h2>
+
+<figure>
+<svg viewBox="0 0 960 420" role="img" aria-labelledby="t2 d2" xmlns="http://www.w3.org/2000/svg">
+  <title id="t2">The prediction pipeline</title>
+  <desc id="d2">Raw price, news and macro data become engineered features, which are split
+  chronologically into training and testing periods, used to train four XGBoost models,
+  then checked by a risk engine before being stored and displayed.</desc>
+  <defs>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="7.5" refY="3.2" orient="auto">
+      <path d="M0,0 L7.5,3.2 L0,6.4 Z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <style>
+    .b2  { rx:9; stroke-width:1.5; }
+    .in2 { fill:#e8f0f8; stroke:#2e6da4; }
+    .pr2 { fill:#fdf2e4; stroke:#d6700d; }
+    .m2  { fill:#f1ebf8; stroke:#6b3fa0; }
+    .o2  { fill:#e6f4ec; stroke:#1d7a4d; }
+    .g2  { fill:#fbeced; stroke:#ad2831; }
+    .t2  { font:600 12.5px -apple-system,Segoe UI,sans-serif; fill:#15202b; }
+    .s2  { font:10.5px -apple-system,Segoe UI,sans-serif; fill:#6b7785; }
+    .l2  { font:700 10px -apple-system,Segoe UI,sans-serif; fill:#929daa; letter-spacing:.08em; }
+    .f2  { stroke:#929daa; stroke-width:1.6; fill:none; color:#929daa; }
+  </style>
+  <g id="dk2"></g>
+
+  <text class="l2" x="14" y="20">INPUTS</text>
+  <rect class="b2 in2" x="14"  y="28" width="186" height="46"/>
+  <text class="t2" x="26" y="48">Price history</text><text class="s2" x="26" y="64">5 years OHLCV</text>
+  <rect class="b2 in2" x="214" y="28" width="186" height="46"/>
+  <text class="t2" x="226" y="48">News features</text><text class="s2" x="226" y="64">Timestamped</text>
+  <rect class="b2 in2" x="414" y="28" width="186" height="46"/>
+  <text class="t2" x="426" y="48">Macro signals</text><text class="s2" x="426" y="64">Oil, gold, FX</text>
+
+  <text class="l2" x="14" y="106">PREPARE</text>
+  <rect class="b2 pr2" x="14" y="114" width="586" height="46"/>
+  <text class="t2" x="26" y="134">Feature engineering — point-in-time only</text>
+  <text class="s2" x="26" y="150">Split-adjust · indicators · align every value to what was knowable that day</text>
+
+  <rect class="b2 g2" x="620" y="114" width="326" height="46"/>
+  <text class="t2" x="632" y="134">Chronological split</text>
+  <text class="s2" x="632" y="150">Train on past → test on future. Never shuffle.</text>
+
+  <text class="l2" x="14" y="192">TRAIN &amp; PREDICT</text>
+  <rect class="b2 m2" x="14"  y="200" width="226" height="42"/>
+  <text class="t2" x="26" y="220">Close model</text><text class="s2" x="26" y="235">XGBoost regression</text>
+  <rect class="b2 m2" x="254" y="200" width="226" height="42"/>
+  <text class="t2" x="266" y="220">High model</text><text class="s2" x="266" y="235">XGBoost regression</text>
+  <rect class="b2 m2" x="494" y="200" width="226" height="42"/>
+  <text class="t2" x="506" y="220">Low model</text><text class="s2" x="506" y="235">XGBoost regression</text>
+  <rect class="b2 m2" x="734" y="200" width="212" height="42"/>
+  <text class="t2" x="746" y="220">Gain probability</text><text class="s2" x="746" y="235">Classifier + calibration</text>
+
+  <text class="l2" x="14" y="274">CHECK</text>
+  <rect class="b2 g2" x="14" y="282" width="932" height="46"/>
+  <text class="t2" x="26" y="302">Risk &amp; Opportunity Engine</text>
+  <text class="s2" x="26" y="318">Coherence check · uncertainty · liquidity · cost · can return No Trade</text>
+
+  <text class="l2" x="14" y="360">COMPARE</text>
+  <rect class="b2 o2" x="14" y="368" width="458" height="42"/>
+  <text class="t2" x="26" y="388">Beat the baselines?</text>
+  <text class="s2" x="26" y="403">Must outperform naive guesses or it is not promoted</text>
+  <rect class="b2 o2" x="488" y="368" width="458" height="42"/>
+  <text class="t2" x="500" y="388">Store + show</text>
+  <text class="s2" x="500" y="403">Aurora → dashboard, with version and uncertainty</text>
+
+  <g class="f2">
+    <path d="M107,74 L107,114" marker-end="url(#a2)"/>
+    <path d="M307,74 L307,114" marker-end="url(#a2)"/>
+    <path d="M507,74 L507,114" marker-end="url(#a2)"/>
+    <path d="M600,137 L620,137" marker-end="url(#a2)"/>
+    <path d="M307,160 L307,182 L127,182 L127,200" marker-end="url(#a2)"/>
+    <path d="M367,182 L367,200" marker-end="url(#a2)"/>
+    <path d="M607,182 L607,200" marker-end="url(#a2)"/>
+    <path d="M840,182 L840,200" marker-end="url(#a2)"/>
+    <path d="M480,242 L480,282" marker-end="url(#a2)"/>
+    <path d="M243,328 L243,368" marker-end="url(#a2)"/>
+    <path d="M472,389 L488,389" marker-end="url(#a2)"/>
+  </g>
+</svg>
+<figcaption>Figure 1 — The prediction pipeline. The red boxes are the guard rails; they are what
+separate a trustworthy result from a flattering one.</figcaption>
+</figure>
+
+<!-- ===================================================================== -->
+<h2 id="features"><span class="num">4</span>What the model looks at</h2>
+<p class="sub">A "feature" is one measurement the model can see. Roughly 40 are computed per stock per day.</p>
+
+<h3>4.1 Price and volume (always used)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Feature</th><th>What it measures</th><th>Why it might matter</th></tr></thead>
+<tbody>
+<tr><td>Daily return</td><td>Percentage change from yesterday</td><td>The basic unit of price movement</td></tr>
+<tr><td>Daily range</td><td>High minus low, relative to price</td><td>How turbulent the day was</td></tr>
+<tr><td>Gap</td><td>Open vs previous close</td><td>News arriving overnight</td></tr>
+<tr><td>Volume ratio</td><td>Today's volume vs 20-day average</td><td>Unusual participation often precedes movement</td></tr>
+<tr><td>Realised volatility</td><td>Variation over the last 20 days</td><td>Calm and turbulent markets behave differently</td></tr>
+<tr><td>RSI (14)</td><td>Whether recent moves were mostly up or down</td><td>Standard momentum indicator</td></tr>
+<tr><td>MACD</td><td>Two moving averages converging or diverging</td><td>Standard trend indicator</td></tr>
+<tr><td>Distance from moving averages</td><td>Price vs its 9/21/50/200-day averages</td><td>Position within the longer trend</td></tr>
+<tr><td>52-week position</td><td>Where price sits in its yearly range</td><td>Near highs and near lows behave differently</td></tr>
+<tr><td>Index return</td><td>What NIFTY 50 did</td><td>Most stock movement is the market moving</td></tr>
+<tr><td>Delivery percentage</td><td>Shares taken for delivery vs traded intraday</td><td>India-specific conviction signal</td></tr>
+</tbody></table></div>
+
+<h3>4.2 News and macro (tested, kept only if they earn it)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Feature</th><th>How it is produced</th></tr></thead>
+<tbody>
+<tr><td>News sentiment</td><td>An LLM reads each article and scores it negative to positive</td></tr>
+<tr><td>Event type</td><td>Classified — earnings, regulatory, management change, order win</td></tr>
+<tr><td>News volume</td><td>How many articles mention this company today</td></tr>
+<tr><td>Crude oil change</td><td>Direct price input for several Indian sectors</td></tr>
+<tr><td>USD/INR change</td><td>Matters for importers and IT exporters</td></tr>
+<tr><td>Gold change</td><td>A risk-appetite proxy</td></tr>
+</tbody></table></div>
+
+<div class="note warn">
+  <span class="lbl">News must prove itself</span>
+  <p>News features are <b>not</b> assumed to help. The plan is to build a price-only model first,
+  measure it, then add news and measure again. If the news version is not meaningfully better,
+  news is dropped — saving the provider subscription and the LLM cost.</p>
+  <p>This matters because news is the most leak-prone data in the system. An article dated "15 March"
+  may have been published at 11pm, after the market closed. Training on it as if it were available
+  at 9am that morning gives the model tomorrow's newspaper, and produces spectacular backtest
+  results that evaporate in live use. Every article is keyed to its <b>publication timestamp</b>,
+  never its date.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="training"><span class="num">5</span>How the models learn</h2>
+
+<h3>5.1 What XGBoost is</h3>
+<div class="plain">
+  <span class="lbl">In plain words</span>
+  <p>XGBoost builds hundreds of small decision trees, one after another. The first tree makes a crude
+  guess. The second tree studies where the first was wrong and corrects it. The third corrects what
+  remains. After a few hundred rounds, the combined result is far better than any single tree.</p>
+  <p>It is the standard choice for table-shaped data like this, it trains in minutes on an ordinary CPU,
+  and it can report which features mattered most — which matters when a human has to explain
+  a forecast to someone else.</p>
+</div>
+
+<h3>5.2 The training target is the <em>change</em>, never the price</h3>
+<div class="note stop">
+  <span class="lbl">The single most important technical decision in this document</span>
+  <p>The models are trained to predict the <b>percentage change</b>, not the price. The rupee figure
+  shown on screen is computed afterwards from today's price.</p>
+  <p><b>Why this matters so much:</b> if you train a model to predict tomorrow's <em>price</em>,
+  it quickly discovers that "tomorrow ≈ today" is almost right every single day. It will score
+  R² above 0.99 and look extraordinary — while having learned absolutely nothing about what
+  will change. This one mistake is responsible for the great majority of published stock-prediction
+  results claiming 95%+ accuracy.</p>
+  <p>Predicting the change removes that illusion. The scores look much worse, and they are honest.</p>
+</div>
+
+<h3>5.3 Walk-forward testing</h3>
+<p>Ordinary machine learning shuffles data randomly into training and testing piles. For time series
+that is catastrophic — it lets the model learn from June to predict March.</p>
+<p>Instead, testing walks forward through time, the way reality does:</p>
+
+<pre><code>Fold 1   train 2021─2022  │ gap │ test 2023 Q1
+Fold 2   train 2021─2023Q1│ gap │ test 2023 Q2
+Fold 3   train 2021─2023Q2│ gap │ test 2023 Q3
+Fold 4   train 2021─2023Q3│ gap │ test 2023 Q4
+                            ▲
+                   5-day gap, always</code></pre>
+
+<div class="plain">
+  <span class="lbl">Why the gap exists</span>
+  <p>Because the forecast looks 5 days ahead, the last day of training has an answer that only
+  becomes known 5 days <em>into</em> the test period. Without a gap, a sliver of the test period
+  leaks backwards into training. The model would effectively see a few days of its own exam paper.</p>
+  <p>The gap is small, easily forgotten, and removing it inflates results noticeably. It is one of
+  the most common silent errors in financial backtesting.</p>
+</div>
+
+<h3>5.4 Making the probability honest</h3>
+<p>A raw model probability of 0.7 does not mean a 70% chance. Models are routinely overconfident.
+<b>Calibration</b> fixes this by comparing predicted probabilities against what actually happened
+on held-out data and correcting the mapping.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Model says</th><th>Reality (uncalibrated)</th><th>After calibration</th></tr></thead>
+<tbody>
+<tr><td>90% chance of gain</td><td>Actually right 62% of the time</td><td>Reported as 62%</td></tr>
+<tr><td>70% chance of gain</td><td>Actually right 56% of the time</td><td>Reported as 56%</td></tr>
+<tr><td>55% chance of gain</td><td>Actually right 53% of the time</td><td>Reported as 53%</td></tr>
+</tbody></table></div>
+
+<p>An uncalibrated probability is just a ranking number wearing a percentage sign. If calibration
+error exceeds the threshold, the model is <b>blocked from promotion</b> — it does not reach the dashboard.</p>
+
+<!-- ===================================================================== -->
+<h2 id="baselines"><span class="num">6</span>The baselines — the honesty test</h2>
+<p class="sub">Before any model is trusted, it must beat deliberately stupid alternatives.
+This is the most important section in this document.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Baseline</th><th>What it does</th><th>Why it is included</th></tr></thead>
+<tbody>
+<tr><td><b>B1 · No change</b></td><td>Predicts tomorrow equals today</td><td>Shockingly hard to beat on price</td></tr>
+<tr><td><b>B2 · Always up</b></td><td>Always predicts a gain</td><td>Indian markets rose most years. This alone can score 55%+</td></tr>
+<tr><td><b>B3 · Historical average</b></td><td>Uses this stock's long-run average return</td><td>Tests whether any drift is exploitable</td></tr>
+<tr><td><b>B4 · Yesterday's range</b></td><td>Uses recent high/low as the forecast</td><td>Baseline for the high and low models</td></tr>
+<tr><td><b>B5 · Momentum</b></td><td>Continues the recent trend</td><td>A simple, well-documented market factor</td></tr>
+<tr><td><b>B6 · Price-only model</b></td><td>The full model without news or macro</td><td><b>Measures whether news earns its cost</b></td></tr>
+</tbody></table></div>
+
+<div class="note stop">
+  <span class="lbl">Why B2 deserves special attention</span>
+  <p>"Always predict up" sounds absurd. But Indian equity markets rose in most years of any
+  5-year window, so this baseline can score <b>55% or higher</b> on directional accuracy without
+  containing a single idea.</p>
+  <p>This is exactly how impressive-sounding accuracy claims are manufactured — usually without
+  anyone intending to deceive. A model reporting "58% accurate" sounds good until you learn the
+  always-up baseline scored 56% on the same data. The real contribution was two points, and
+  it may not survive transaction costs.</p>
+  <p>Every accuracy figure this system reports is shown <b>next to its baseline</b>. A number
+  without its baseline is not a result.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="expect"><span class="num">7</span>What results to realistically expect</h2>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Measure</th><th>Realistic target</th><th>Treat as a red flag if</th></tr></thead>
+<tbody>
+<tr><td>Directional accuracy (5-day)</td><td><b>53–56%</b></td><td><span class="pill stop">Above 60%</span></td></tr>
+<tr><td>Edge over always-up baseline</td><td>+1 to +3 points</td><td><span class="pill stop">Above +5</span></td></tr>
+<tr><td>Closing-price error</td><td>Slightly better than no-change</td><td><span class="pill stop">Dramatically better</span></td></tr>
+<tr><td>R² on returns</td><td><b>Near zero, possibly negative</b></td><td><span class="pill stop">Above 0.10</span></td></tr>
+<tr><td>Probability calibration</td><td>Error below 0.10</td><td>—</td></tr>
+<tr><td>Range coverage</td><td>Actual price inside predicted range ~90% of the time</td><td>Much higher with a very wide range</td></tr>
+</tbody></table></div>
+
+<div class="note warn">
+  <span class="lbl">The rule that protects this project</span>
+  <p>In stock forecasting, <b>results that look too good are far more likely to be bugs than breakthroughs.</b>
+  The known causes are all mundane: predicting price instead of change, leaking future information
+  through a scaler or a timestamp, or forgetting the gap between training and testing.</p>
+  <p>So a metric that is <em>too high</em> blocks promotion exactly as a failing metric does, until
+  someone explains why. This is automated in the promotion gate, not left to discipline.</p>
+</div>
+
+<h3>Why R² near zero is the correct outcome</h3>
+<p>R² measures how much of the variation a model explains. For 5-day stock returns on liquid large-caps,
+honest R² is near zero. That is not failure — it is what efficient markets look like. If large, easy
+predictability existed in NIFTY 50 stocks, well-capitalised firms with faster systems would have
+removed it already.</p>
+<p>The useful question is not "can we predict the market?" but "is there a small, measurable,
+repeatable edge, and does it survive costs?" A small honest edge, properly measured, is worth far more
+than a large imaginary one.</p>
+
+<!-- ===================================================================== -->
+<h2 id="leak"><span class="num">8</span>Guarding against fooling ourselves</h2>
+<p class="sub">Data leakage is when the model accidentally sees the future. It is the number one cause
+of models that work beautifully in testing and fail completely in practice.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Leak</th><th>How it sneaks in</th><th>Guard</th></tr></thead>
+<tbody>
+<tr><td>Future prices</td><td>Rolling window accidentally includes the target day</td><td>Every feature recomputed from truncated history and compared</td></tr>
+<tr><td>Scaler leakage</td><td>Normalising across all data before splitting — the scaler has seen future highs and lows</td><td>Scalers fitted on the training fold only</td></tr>
+<tr><td>Overlapping labels</td><td>5-day targets overlap the test period boundary</td><td>Mandatory 5-day gap between train and test</td></tr>
+<tr><td>News timestamps</td><td>Using article <em>date</em> rather than publication <em>time</em></td><td>Minute-level publication timestamps; evening news is next-day news</td></tr>
+<tr><td>Survivorship bias</td><td>Training on today's NIFTY 50 list using old data — the list already reflects who did well</td><td>Point-in-time index membership per date</td></tr>
+<tr><td>Corporate actions</td><td>An unadjusted 1:5 split looks like an 80% crash</td><td>Split adjustment plus automatic flag above 25% daily move</td></tr>
+</tbody></table></div>
+
+<div class="note ok">
+  <span class="lbl">The shuffled-label test — the strongest check available</span>
+  <p>Take the training data and <b>randomise every answer</b>, so there is genuinely nothing to learn.
+  Retrain. The model must now perform no better than random.</p>
+  <p>If it still shows skill, information is reaching it through a path that is not the intended features —
+  and no amount of code review finds that as reliably as this one test. It runs automatically before
+  any model is promoted.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="risk"><span class="num">9</span>The Risk &amp; Opportunity Engine</h2>
+<p class="sub">Not a fifth prediction model. A rule-based layer that decides whether the four
+forecasts are worth showing.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Check</th><th>Question asked</th><th>If it fails</th></tr></thead>
+<tbody>
+<tr><td>Coherence</td><td>Do low ≤ close ≤ high hold?</td><td><b>No Trade</b> — models disagree</td></tr>
+<tr><td>Uncertainty</td><td>Is the predicted range unusually wide?</td><td>Risk score raised; may force No Trade</td></tr>
+<tr><td>Liquidity</td><td>Does this stock trade enough to act on?</td><td>Excluded</td></tr>
+<tr><td>Downside</td><td>How bad is the realistic worst case?</td><td>Flagged prominently in the UI</td></tr>
+<tr><td>Reward vs risk</td><td>Is upside meaningfully larger than downside?</td><td>Low opportunity score</td></tr>
+<tr><td>Cost reality</td><td>Does the expected move exceed trading costs?</td><td><b>No Trade</b> — not worth acting on</td></tr>
+<tr><td>Model health</td><td>Is the model still beating its baseline recently?</td><td>All forecasts suspended</td></tr>
+<tr><td>Data freshness</td><td>Is any input stale or missing?</td><td><b>No Trade</b></td></tr>
+</tbody></table></div>
+
+<div class="plain">
+  <span class="lbl">Why No Trade is a feature, not a shortfall</span>
+  <p>A forecasting system that always produces an answer is less useful than one that admits
+  uncertainty. Markets are frequently unpredictable, and a system that says "today I do not know"
+  on those days is behaving correctly.</p>
+  <p>Expect <b>No Trade on a substantial fraction of stock-days</b>. That is the engine working,
+  not the engine failing. A system that confidently forecasts all 50 stocks every single day would
+  be the worrying one.</p>
+</div>
+
+<h3>The cost check deserves emphasis</h3>
+<p>Round-trip costs on Indian equity delivery trades — brokerage, STT, exchange charges, stamp duty,
+GST and realistic slippage — come to roughly <b>0.25–0.30%</b>. If the model predicts a 0.2% move,
+there is no opportunity even if the prediction is perfectly correct. The engine filters these out
+before they reach the screen.</p>
+
+<!-- ===================================================================== -->
+<h2 id="retrain"><span class="num">10</span>Keeping models honest over time</h2>
+
+<h3>10.1 Weekly retraining, not daily</h3>
+<p>Models retrain every Sunday on data including the past week. Not daily, because one day adds
+about 0.1% new information to the training set while requiring a full re-validation to be trustworthy —
+the cost is real and the benefit is not.</p>
+
+<h3>10.2 The promotion gate</h3>
+<p>A newly trained model replaces the current one only if it passes every check:</p>
+<ol class="steps">
+  <li><span class="st">Beats the baselines</span><span class="sd">Including the always-up baseline, by a margin wide enough to not be chance.</span></li>
+  <li><span class="st">Probabilities are calibrated</span><span class="sd">Calibration error below threshold, with a reliability chart produced for review.</span></li>
+  <li><span class="st">Forecasts are coherent</span><span class="sd">Low ≤ close ≤ high holds across the test period.</span></li>
+  <li><span class="st">Leakage tests pass</span><span class="sd">Including the shuffled-label test.</span></li>
+  <li><span class="st">Nothing is suspiciously good</span><span class="sd">No metric above its red-flag threshold without an explanation.</span></li>
+  <li><span class="st">Not materially worse than current</span><span class="sd">Prevents a bad week quietly degrading the system.</span></li>
+</ol>
+<p>If a model fails, <b>the previous model stays in service</b> and an alert is raised. If no model has
+ever passed, the system shows <b>no forecasts at all</b> rather than unvalidated ones.</p>
+
+<h3>10.3 Watching for decay</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Monitor</th><th>Watches for</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td>Rolling accuracy</td><td>60-day accuracy falling toward baseline</td><td>Alert; investigate</td></tr>
+<tr><td>Edge decay</td><td>Advantage over baseline reaching zero</td><td><b>Consider suspending forecasts</b></td></tr>
+<tr><td>Calibration drift</td><td>Probabilities becoming unreliable</td><td>Refit calibration</td></tr>
+<tr><td>Feature drift</td><td>Inputs looking unlike training data</td><td>Alert; possible regime change</td></tr>
+<tr><td>Volatility regime</td><td>Market far calmer or wilder than training period</td><td>Widen ranges; flag forecasts</td></tr>
+</tbody></table></div>
+
+<p>The edge-decay monitor is the one that matters most. A model whose advantage has gone to zero
+is no longer providing value, and the honest response is to stop showing its forecasts — not to
+keep displaying them because the system is already built.</p>
+
+<!-- ===================================================================== -->
+<h2 id="output"><span class="num">11</span>What a finished forecast looks like</h2>
+
+<pre><code>Stock         RELIANCE (NSE)
+Generated     29 Oct 2026, 08:30 IST
+Horizon       5 trading days  →  5 Nov 2026
+Current       ₹2,430.50
+
+FORECAST
+  Closing price     ₹2,448     range ₹2,286 – ₹2,588  (90% of the time)
+  Highest price     ₹2,497     range ₹2,410 – ₹2,620
+  Lowest price      ₹2,371     range ₹2,240 – ₹2,425
+  Chance of gain    54%        (calibrated)
+
+RISK ASSESSMENT
+  Opportunity       Moderate
+  Expected move     +0.7%
+  Trading cost      -0.3%
+  Net expectation   +0.4%      thin
+  Downside (worst 5%)  -5.9%
+  Decision          PROCEED WITH CAUTION
+
+MODEL CONTEXT
+  Version           v2.4.0  ·  trained 27 Oct 2026
+  Accuracy (60d)    54.1%
+  Baseline          52.0%  (always-up)
+  Edge              +2.1 points  ·  range +0.3 to +3.9
+
+  Forecast, not a guarantee. Ranges are estimates, not limits.
+   Not investment advice.</code></pre>
+
+<div class="note">
+  <span class="lbl">Why the baseline appears on screen</span>
+  <p>Showing "54.1% accurate" alone invites the reader to think the system is good. Showing it beside
+  "baseline 52.0%, edge +2.1 points, range +0.3 to +3.9" tells the truth: there is a small measured
+  advantage, and the range shows how certain we are about it.</p>
+  <p>Carrying that context onto the screen — rather than burying it in a report nobody opens — is a
+  deliberate design decision. It makes it difficult for anyone to present a forecast without its honest
+  framing.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="limits"><span class="num">12</span>What this system cannot do</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Cannot</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Predict news before it happens</td><td>Nothing in the data contains tomorrow's announcements. A model can react to news, never anticipate it.</td></tr>
+<tr><td>Handle unprecedented events</td><td>A model learns from history. A pandemic, war or policy shock has no precedent in the training window.</td></tr>
+<tr><td>Guarantee the predicted high or low</td><td>They are estimates of typical outcomes. Prices exceed them regularly.</td></tr>
+<tr><td>Beat the market reliably</td><td>No evidence it can, and this document does not claim it. The goal is measurement, not profit.</td></tr>
+<tr><td>Work unchanged forever</td><td>Markets shift. Hence weekly retraining and decay monitoring.</td></tr>
+<tr><td>Replace judgement</td><td>It is a decision-support tool. A person reads it, with its uncertainty, and decides.</td></tr>
+</tbody></table></div>
+
+<div class="note stop">
+  <span class="lbl">The sentence to repeat to any audience</span>
+  <p>This system produces <b>measured, honest, uncertainty-aware forecasts with a small
+  statistical edge</b> — if an edge exists at all. It does not produce reliable profit,
+  and it is not investment advice. Its real value is that every number it shows can be traced,
+  reproduced and checked.</p>
+</div>
+
+<div class="footer">
+  <span>StockAI — Prediction Engine v3.0 · 29 October 2026</span>
+  <span>Research design · Not investment advice · No profitability claim</span>
+</div>
+
+</div>
+
+<script>
+(function () {
+  var r = document.documentElement, b = document.getElementById('tbtn');
+  var saved = null;
+  try { saved = localStorage.getItem('sa-theme-v2'); } catch (e) {}
+  var cur = saved || 'light';
+  apply(cur);
+  b.addEventListener('click', function () {
+    cur = cur === 'dark' ? 'light' : 'dark';
+    apply(cur);
+    try { localStorage.setItem('sa-theme-v2', cur); } catch (e) {}
+  });
+  function apply(t) {
+    r.setAttribute('data-theme', t);
+    b.textContent = t === 'dark' ? 'Light' : 'Dark';
+    var g = document.getElementById('dk2');
+    if (g) {
+      g.innerHTML = t === 'dark'
+        ? '<style>.in2{fill:#1a2836;stroke:#6ba3d8}.pr2{fill:#2a2015;stroke:#f0a050}' +
+          '.m2{fill:#241c33;stroke:#b391dd}.o2{fill:#152a1f;stroke:#5cc78e}' +
+          '.g2{fill:#2b1a1c;stroke:#e88a90}.t2{fill:#e6ecf2}.s2{fill:#94a2b1}' +
+          '.l2{fill:#74828f}.f2{stroke:#5a6773;color:#5a6773}</style>'
+        : '';
+    }
+  }
+})();
+</script>
+
+</body>
+</html>

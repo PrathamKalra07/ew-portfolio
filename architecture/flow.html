@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockAI Flow Map</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+/* ------------------------------------------------------------------
+   This page is a printed-style white document. It does NOT follow the
+   operating system dark mode: every colour below is pinned to a light
+   value so the page looks identical on every machine and on paper.
+   ------------------------------------------------------------------ */
+:root,
+:root:not([data-theme="x"]),
+:root[data-theme="dark"],
+:root[data-theme="light"],
+html[data-theme] {
+  --ink:#15202b; --ink-soft:#3d4a57; --muted:#6b7785; --faint:#929daa;
+  --line:#dde3e9; --line-soft:#eaeef2;
+  --bg:#ffffff; --bg-alt:#fafbfc; --bg-sunk:#f1f4f7;
+  --brand:#1f3a5f; --brand-mid:#2e6da4; --brand-soft:#e8f0f8;
+  --aws:#d6700d; --aws-soft:#fdf2e4;
+  --ok:#1d7a4d; --ok-soft:#e9f5ee;
+  --warn:#9a6400; --warn-soft:#fdf6e4;
+  --stop:#ad2831; --stop-soft:#fcf0f1;
+  --ml:#6b3fa0; --ml-soft:#f1ebf8;
+  --shadow:0 1px 2px rgba(21,32,43,.05), 0 4px 14px rgba(21,32,43,.05);
+  --f1:#2e6da4; --f1b:#f4f8fc;
+  --f2:#6b3fa0; --f2b:#f8f5fc;
+  --f3:#c2610a; --f3b:#fffbf5;
+  --f4:#1d7a4d; --f4b:#f4faf6;
+}
+html, body { background:#ffffff; }
+
+.canvas{background:#ffffff;border:1px solid var(--line);border-radius:var(--radius);padding:26px 18px;margin:22px 0}
+.canvas svg{display:block;margin:0 auto;width:100%;height:auto}
+.canvas.scroll{overflow-x:auto}
+.canvas.scroll svg{min-width:1000px}
+
+.s-lbl{font-family:var(--sans);font-size:13.5px;font-weight:650;fill:var(--ink)}
+.s-sub{font-family:var(--sans);font-size:10.5px;fill:var(--muted)}
+.s-tech{font-family:var(--mono);font-size:9px;letter-spacing:.2px}
+.s-num{font-family:var(--sans);font-size:11.5px;font-weight:700;fill:var(--bg)}
+.s-edge{fill:none;stroke:var(--faint);stroke-width:1.6}
+.s-etxt{font-family:var(--sans);font-size:10px;fill:var(--muted);font-style:italic}
+.s-band{font-family:var(--sans);font-size:10px;font-weight:750;letter-spacing:1px}
+.s-big{font-family:var(--sans);font-size:15px;font-weight:700;fill:var(--ink)}
+.s-mono{font-family:var(--mono);font-size:11px;fill:var(--ink-soft)}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;margin:18px 0 2px;font-size:12.5px;color:var(--ink-soft)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:13px;height:13px;border-radius:3px;border:1.6px solid;display:inline-block}
+
+.chain{margin:22px 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.row{display:grid;grid-template-columns:62px 1fr 220px;gap:0;border-bottom:1px solid var(--line-soft)}
+.row:last-child{border-bottom:0}
+.row:nth-child(even){background:var(--bg-alt)}
+.row .idx{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-right:1px solid var(--line-soft);padding:14px 0}
+.row .idx b{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12.5px}
+.row .idx s{width:1px;flex:1;background:var(--line);text-decoration:none;min-height:8px}
+.row .body{padding:14px 18px}
+.row .body b{display:block;font-size:14px;color:var(--ink);margin-bottom:3px}
+.row .body p{margin:0;font-size:12.8px;line-height:1.6;color:var(--ink-soft)}
+.row .meta{padding:14px 16px;border-left:1px solid var(--line-soft);font-size:11.5px;color:var(--muted);font-family:var(--mono);line-height:1.8}
+.row .meta em{font-style:normal;color:var(--ink-soft)}
+@media (max-width:760px){.row{grid-template-columns:48px 1fr}.row .meta{display:none}}
+@media print{
+  .canvas{page-break-inside:avoid;border-color:#ccd4db}
+  .canvas.scroll{overflow:visible}
+  .canvas.scroll svg{min-width:0}
+  .topbar{display:none}
+  .chain,.row{page-break-inside:avoid}
+  body{background:#fff}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="topbar-in">
+  <div class="brand">StockAI <span>/ Architecture</span></div>
+  <nav class="navlinks">
+    <a href="index.html">System Architecture</a>
+    <a href="flow.html" class="on">Flow Map</a>
+    <a href="prediction-engine.html">Prediction Engine</a>
+    <a href="upstox-feasibility.html">Upstox Feasibility</a>
+    <a href="complete-walkthrough.html">Complete Walkthrough</a>
+  </nav>
+</div></div>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Document 2 of 5 &middot; One-page flow</div>
+  <h1>End-to-end Flow Map</h1>
+  <p class="lede">The whole system as one straight line. Each step hands its result to the next,
+  from the stock exchange on the left to a person reading a screen on the right. Ten steps, in order.</p>
+  <div class="metaline">
+    <span><b>Version</b> 2.0</span> &middot;
+    <span><b>Date</b> 29 October 2026</span> &middot;
+    <span><b>Region</b> ap-south-1 (Mumbai)</span> &middot;
+    <span><b>Universe</b> 50 NSE stocks</span> &middot;
+    <span><b>Horizon</b> 5 trading days</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="lbl">How to read this page</span>
+  <p>Follow the numbers. <b>1</b> leads to <b>2</b>, <b>2</b> leads to <b>3</b>, and so on to <b>10</b>.
+  Nothing skips ahead and nothing loops back. Each box shows what comes in, what it does, and what it passes on.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="line"><span class="num">1</span>The straight line</h2>
+<p class="sub">Left to right. The colour tells you what kind of step it is.</p>
+
+<div class="legend">
+  <span><i style="border-color:var(--f1);background:var(--f1b)"></i> Getting the data in</span>
+  <span><i style="border-color:var(--f2);background:var(--f2b)"></i> Storing &amp; preparing it</span>
+  <span><i style="border-color:var(--f3);background:var(--f3b)"></i> Making the forecast</span>
+  <span><i style="border-color:var(--f4);background:var(--f4b)"></i> Showing it to a person</span>
+</div>
+
+<div class="canvas scroll">
+<svg viewBox="0 0 1060 470" role="img" aria-labelledby="t1 d1" xmlns="http://www.w3.org/2000/svg">
+<title id="t1">StockAI ten-step sequence</title>
+<desc id="d1">A left-to-right sequence in two rows. Steps one to five: Upstox supplies market data, a Lambda collects it, quality checks clean it, S3 stores it, and Glue builds forty features. Steps six to ten: SageMaker trains four models, runs the daily forecast, the output is calibrated, a risk gate approves or rejects it, and an analyst reads it on a dashboard.</desc>
+
+<defs>
+  <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="var(--faint)"/>
+  </marker>
+</defs>
+
+<!-- ======= BAND LABELS ======= -->
+<text class="s-band" x="18" y="28" fill="var(--f1)">COLLECT</text>
+<text class="s-band" x="422" y="28" fill="var(--f2)">PREPARE</text>
+<text class="s-band" x="18" y="268" fill="var(--f3)">PREDICT</text>
+<text class="s-band" x="822" y="268" fill="var(--f4)">SHOW</text>
+
+<!-- ======= ROW 1 : steps 1-5 ======= -->
+
+<!-- 1 -->
+<rect x="18" y="44" width="178" height="86" rx="10" fill="var(--f1b)" stroke="var(--f1)" stroke-width="1.6"/>
+<circle cx="18" cy="44" r="13" fill="var(--ink)"/><text class="s-num" x="18" y="48.5" text-anchor="middle">1</text>
+<text class="s-lbl" x="107" y="74" text-anchor="middle">Market data</text>
+<text class="s-sub" x="107" y="92" text-anchor="middle">50 stocks, once a day</text>
+<text class="s-sub" x="107" y="107" text-anchor="middle">open high low close volume</text>
+<text class="s-tech" x="107" y="122" text-anchor="middle" fill="var(--f1)">Upstox API</text>
+
+<path class="s-edge" d="M196,87 H224" marker-end="url(#a1)"/>
+
+<!-- 2 -->
+<rect x="226" y="44" width="178" height="86" rx="10" fill="var(--f1b)" stroke="var(--f1)" stroke-width="1.6"/>
+<circle cx="226" cy="44" r="13" fill="var(--ink)"/><text class="s-num" x="226" y="48.5" text-anchor="middle">2</text>
+<text class="s-lbl" x="315" y="74" text-anchor="middle">Collect it</text>
+<text class="s-sub" x="315" y="92" text-anchor="middle">one call at 16:00 IST</text>
+<text class="s-sub" x="315" y="107" text-anchor="middle">stamped and versioned</text>
+<text class="s-tech" x="315" y="122" text-anchor="middle" fill="var(--f1)">Lambda</text>
+
+<path class="s-edge" d="M404,87 H432" marker-end="url(#a1)"/>
+<text class="s-etxt" x="418" y="78" text-anchor="middle">50 rows</text>
+
+<!-- 3 -->
+<rect x="434" y="44" width="178" height="86" rx="10" fill="var(--f1b)" stroke="var(--f1)" stroke-width="1.6"/>
+<circle cx="434" cy="44" r="13" fill="var(--ink)"/><text class="s-num" x="434" y="48.5" text-anchor="middle">3</text>
+<text class="s-lbl" x="523" y="74" text-anchor="middle">Check it</text>
+<text class="s-sub" x="523" y="92" text-anchor="middle">14 quality rules</text>
+<text class="s-sub" x="523" y="107" text-anchor="middle">splits and gaps fixed</text>
+<text class="s-tech" x="523" y="122" text-anchor="middle" fill="var(--f1)">bad data stops here</text>
+
+<path class="s-edge" d="M612,87 H640" marker-end="url(#a1)"/>
+<text class="s-etxt" x="626" y="78" text-anchor="middle">clean</text>
+
+<!-- 4 -->
+<rect x="642" y="44" width="178" height="86" rx="10" fill="var(--f2b)" stroke="var(--f2)" stroke-width="1.6"/>
+<circle cx="642" cy="44" r="13" fill="var(--ink)"/><text class="s-num" x="642" y="48.5" text-anchor="middle">4</text>
+<text class="s-lbl" x="731" y="74" text-anchor="middle">Store it</text>
+<text class="s-sub" x="731" y="92" text-anchor="middle">6 years of history</text>
+<text class="s-sub" x="731" y="107" text-anchor="middle">the source of truth</text>
+<text class="s-tech" x="731" y="122" text-anchor="middle" fill="var(--f2)">S3 data lake</text>
+
+<path class="s-edge" d="M820,87 H848" marker-end="url(#a1)"/>
+
+<!-- 5 -->
+<rect x="850" y="44" width="178" height="86" rx="10" fill="var(--f2b)" stroke="var(--f2)" stroke-width="1.6"/>
+<circle cx="850" cy="44" r="13" fill="var(--ink)"/><text class="s-num" x="850" y="48.5" text-anchor="middle">5</text>
+<text class="s-lbl" x="939" y="74" text-anchor="middle">Build features</text>
+<text class="s-sub" x="939" y="92" text-anchor="middle">5 raw numbers &rarr; 40</text>
+<text class="s-sub" x="939" y="107" text-anchor="middle">RSI, trend, volume&hellip;</text>
+<text class="s-tech" x="939" y="122" text-anchor="middle" fill="var(--f2)">Glue</text>
+
+<!-- ===== WRAP DOWN TO ROW 2 ===== -->
+<path class="s-edge" d="M939,130 V168 H70 V222" marker-end="url(#a1)"/>
+<text class="s-etxt" x="520" y="162" text-anchor="middle">50,000 rows &times; 40 columns &mdash; this is what the model learns from</text>
+
+<!-- ======= ROW 2 : steps 6-10 ======= -->
+
+<!-- 6 -->
+<rect x="18" y="284" width="178" height="86" rx="10" fill="var(--f3b)" stroke="var(--f3)" stroke-width="1.6"/>
+<circle cx="18" cy="284" r="13" fill="var(--ink)"/><text class="s-num" x="18" y="288.5" text-anchor="middle">6</text>
+<text class="s-lbl" x="107" y="314" text-anchor="middle">Train 4 models</text>
+<text class="s-sub" x="107" y="332" text-anchor="middle">once a week, Sunday</text>
+<text class="s-sub" x="107" y="347" text-anchor="middle">5 minutes, about $0.50</text>
+<text class="s-tech" x="107" y="362" text-anchor="middle" fill="var(--f3)">SageMaker Training</text>
+
+<path class="s-edge" d="M196,327 H224" marker-end="url(#a1)"/>
+<text class="s-etxt" x="210" y="318" text-anchor="middle">4 files</text>
+
+<!-- 7 -->
+<rect x="226" y="284" width="178" height="86" rx="10" fill="var(--f3b)" stroke="var(--f3)" stroke-width="1.6"/>
+<circle cx="226" cy="284" r="13" fill="var(--ink)"/><text class="s-num" x="226" y="288.5" text-anchor="middle">7</text>
+<text class="s-lbl" x="315" y="314" text-anchor="middle">Run forecast</text>
+<text class="s-sub" x="315" y="332" text-anchor="middle">every day at 08:30</text>
+<text class="s-sub" x="315" y="347" text-anchor="middle">50 rows &rarr; 200 numbers</text>
+<text class="s-tech" x="315" y="362" text-anchor="middle" fill="var(--f3)">Batch Transform</text>
+
+<path class="s-edge" d="M404,327 H432" marker-end="url(#a1)"/>
+
+<!-- 8 -->
+<rect x="434" y="284" width="178" height="86" rx="10" fill="var(--f3b)" stroke="var(--f3)" stroke-width="1.6"/>
+<circle cx="434" cy="284" r="13" fill="var(--ink)"/><text class="s-num" x="434" y="288.5" text-anchor="middle">8</text>
+<text class="s-lbl" x="523" y="314" text-anchor="middle">Fix the odds</text>
+<text class="s-sub" x="523" y="332" text-anchor="middle">score &rarr; real probability</text>
+<text class="s-sub" x="523" y="347" text-anchor="middle">70% must mean 70%</text>
+<text class="s-tech" x="523" y="362" text-anchor="middle" fill="var(--f3)">calibration</text>
+
+<path class="s-edge" d="M612,327 H640" marker-end="url(#a1)"/>
+
+<!-- 9 -->
+<rect x="642" y="284" width="178" height="86" rx="10" fill="var(--f3b)" stroke="var(--f3)" stroke-width="1.6" stroke-dasharray="5 3"/>
+<circle cx="642" cy="284" r="13" fill="var(--ink)"/><text class="s-num" x="642" y="288.5" text-anchor="middle">9</text>
+<text class="s-lbl" x="731" y="314" text-anchor="middle">Safety gate</text>
+<text class="s-sub" x="731" y="332" text-anchor="middle">do the numbers agree?</text>
+<text class="s-sub" x="731" y="347" text-anchor="middle">is it worth the cost?</text>
+<text class="s-tech" x="731" y="362" text-anchor="middle" fill="var(--f3)">else &rarr; NO TRADE</text>
+
+<path class="s-edge" d="M820,327 H848" marker-end="url(#a1)"/>
+<text class="s-etxt" x="834" y="318" text-anchor="middle">passed</text>
+
+<!-- 10 -->
+<rect x="850" y="284" width="178" height="86" rx="10" fill="var(--f4b)" stroke="var(--f4)" stroke-width="1.6"/>
+<circle cx="850" cy="284" r="13" fill="var(--ink)"/><text class="s-num" x="850" y="288.5" text-anchor="middle">10</text>
+<text class="s-lbl" x="939" y="314" text-anchor="middle">Analyst reads it</text>
+<text class="s-sub" x="939" y="332" text-anchor="middle">50 forecasts on screen</text>
+<text class="s-sub" x="939" y="347" text-anchor="middle">accuracy always shown</text>
+<text class="s-tech" x="939" y="362" text-anchor="middle" fill="var(--f4)">Dashboard</text>
+
+<!-- ======= CLOSING NOTE ======= -->
+<rect x="18" y="404" width="1010" height="48" rx="8" fill="var(--bg-alt)" stroke="var(--line)" stroke-width="1"/>
+<text class="s-mono" x="38" y="424">The line ends at step 10.</text>
+<text class="s-sub" x="38" y="441">There is no step 11. No order is ever placed, no broker is connected, no money is touched. A person reads the screen and decides.</text>
+</svg>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="steps"><span class="num">2</span>Each step in turn</h2>
+<p class="sub">The same ten steps, with what goes in and what comes out.</p>
+
+<div class="chain">
+
+<div class="row">
+  <div class="idx"><b>1</b><s></s></div>
+  <div class="body"><b>Market data arrives</b>
+  <p>Upstox publishes one completed candle per stock per day &mdash; the opening price, the highest, the lowest, the closing price, and how many shares traded. Five numbers, 50 stocks. That is the entire raw input to this system.</p></div>
+  <div class="meta"><em>in</em> &mdash;<br><em>out</em> 50 candles<br><em>when</em> after 15:30</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>2</b><s></s></div>
+  <div class="body"><b>We collect it</b>
+  <p>A single small program wakes at 16:00, makes one request, and writes down what it got. It records the time it asked and a version number, so if anyone questions a forecast months later we can reproduce the exact data it was built on.</p></div>
+  <div class="meta"><em>in</em> 50 candles<br><em>out</em> 50 stamped rows<br><em>on</em> Lambda</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>3</b><s></s></div>
+  <div class="body"><b>We check it</b>
+  <p>Fourteen rules run before anything is trusted: missing days, zero volume, impossible prices, and corporate actions. If a company splits its shares one into five, the price drops 80% overnight without anyone losing a rupee &mdash; left unadjusted, the model would learn a crash that never happened. <b>If a check fails, the pipeline stops.</b> No forecast is better than a wrong one.</p></div>
+  <div class="meta"><em>in</em> 50 raw rows<br><em>out</em> 50 clean rows<br><em>or</em> halt + alert</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>4</b><s></s></div>
+  <div class="body"><b>We store it</b>
+  <p>Clean data goes into S3 and stays there. Six years of daily history for all 50 stocks, which is a surprisingly small amount of data &mdash; a few hundred megabytes. Everything downstream reads from here, and nothing else is treated as the truth.</p></div>
+  <div class="meta"><em>in</em> clean rows<br><em>out</em> 6 yr history<br><em>on</em> S3</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>5</b><s></s></div>
+  <div class="body"><b>We build features</b>
+  <p>Five raw numbers tell a model almost nothing. So we calculate 40 richer ones from them &mdash; how much it moved this week, how choppy it has been, whether it is above or below its own average, whether volume is unusual, and what the wider market did. This is the step that does the real work, and it is where most of the engineering effort goes.</p></div>
+  <div class="meta"><em>in</em> 5 numbers<br><em>out</em> 40 features<br><em>on</em> Glue</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>6</b><s></s></div>
+  <div class="body"><b>We train four models</b>
+  <p>Once a week we show the computer every past day we have &mdash; about 50,000 rows &mdash; each one pairing <em>what we knew that morning</em> with <em>what actually happened five days later</em>. It finds the patterns itself. Four models get trained, because we are asking four different questions. Takes five minutes.</p></div>
+  <div class="meta"><em>in</em> 50,000 rows<br><em>out</em> 4 model files<br><em>when</em> Sunday 02:00</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>7</b><s></s></div>
+  <div class="body"><b>We run the forecast</b>
+  <p>Every morning at 08:30 the four trained models are loaded and today&rsquo;s 50 rows are fed through them. Out come 200 numbers &mdash; for each stock: where it should close, the highest it should reach, the lowest it should dip, and the odds it ends higher. Three minutes, then the machine switches off.</p></div>
+  <div class="meta"><em>in</em> 50 &times; 40<br><em>out</em> 200 numbers<br><em>when</em> daily 08:30</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>8</b><s></s></div>
+  <div class="body"><b>We fix the odds</b>
+  <p>The fourth model returns a score between 0 and 1, and it is tempting to call that a probability &mdash; but it is not one yet. Left alone it is systematically overconfident. This step corrects it against history, so that when the screen says 70%, those days really did go up about 70% of the time.</p></div>
+  <div class="meta"><em>in</em> raw score<br><em>out</em> true probability<br><em>gate</em> error &le; 0.10</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>9</b><s></s></div>
+  <div class="body"><b>The safety gate</b>
+  <p>Last check before anything is shown. Do the three price predictions agree with each other &mdash; is the low actually below the close, and the close below the high? Is the expected move big enough to beat trading costs of about 0.3%? Anything that fails is labelled <b>NO TRADE</b> and displayed as such, never quietly hidden.</p></div>
+  <div class="meta"><em>in</em> 200 numbers<br><em>out</em> approved<br><em>or</em> NO TRADE</div>
+</div>
+
+<div class="row">
+  <div class="idx"><b>10</b></div>
+  <div class="body"><b>A person reads it</b>
+  <p>The 50 forecasts appear on a private dashboard behind a login. Each one shows its target, its stop level, and its probability &mdash; and next to every number, how accurate the model has actually been lately compared with simply guessing &ldquo;up&rdquo; every day. <b>The line ends here.</b></p></div>
+  <div class="meta"><em>in</em> approved<br><em>out</em> a decision<br><em>by</em> a human</div>
+</div>
+
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="four"><span class="num">3</span>What step 7 actually produces</h2>
+<p class="sub">Four questions, four answers, for every one of the 50 stocks.</p>
+
+<div class="canvas">
+<svg viewBox="0 0 1000 330" role="img" aria-labelledby="t2 d2" xmlns="http://www.w3.org/2000/svg">
+<title id="t2">The four model outputs</title>
+<desc id="d2">One set of forty features for a stock feeds four separate models, which answer where it will close, the highest it will reach, the lowest it will dip, and the probability it ends higher. A safety check confirms low is below close and close is below high.</desc>
+
+<rect x="378" y="18" width="244" height="54" rx="9" fill="var(--f2b)" stroke="var(--f2)" stroke-width="1.6"/>
+<text class="s-lbl" x="500" y="42" text-anchor="middle">RELIANCE today</text>
+<text class="s-sub" x="500" y="60" text-anchor="middle">40 features, one row</text>
+
+<path class="s-edge" d="M500,72 V96"/>
+<path class="s-edge" d="M118,96 H882"/>
+<path class="s-edge" d="M118,96 V126" marker-end="url(#a1)"/>
+<path class="s-edge" d="M372,96 V126" marker-end="url(#a1)"/>
+<path class="s-edge" d="M628,96 V126" marker-end="url(#a1)"/>
+<path class="s-edge" d="M882,96 V126" marker-end="url(#a1)"/>
+
+<rect x="30" y="128" width="176" height="78" rx="9" fill="var(--f3b)" stroke="var(--f3)" stroke-width="1.6"/>
+<text class="s-sub" x="118" y="150" text-anchor="middle">Model 1</text>
+<text class="s-lbl" x="118" y="170" text-anchor="middle">Where it closes</text>
+<text class="s-big" x="118" y="194" text-anchor="middle">&#8377;2,448</text>
+
+<rect x="284" y="128" width="176" height="78" rx="9" fill="var(--f3b)" stroke="var(--f3)" stroke-width="1.6"/>
+<text class="s-sub" x="372" y="150" text-anchor="middle">Model 2</text>
+<text class="s-lbl" x="372" y="170" text-anchor="middle">Highest it reaches</text>
+<text class="s-big" x="372" y="194" text-anchor="middle">&#8377;2,497</text>
+
+<rect x="540" y="128" width="176" height="78" rx="9" fill="var(--f3b)" stroke="var(--f3)" stroke-width="1.6"/>
+<text class="s-sub" x="628" y="150" text-anchor="middle">Model 3</text>
+<text class="s-lbl" x="628" y="170" text-anchor="middle">Lowest it dips</text>
+<text class="s-big" x="628" y="194" text-anchor="middle">&#8377;2,371</text>
+
+<rect x="794" y="128" width="176" height="78" rx="9" fill="var(--f3b)" stroke="var(--f3)" stroke-width="1.6"/>
+<text class="s-sub" x="882" y="150" text-anchor="middle">Model 4</text>
+<text class="s-lbl" x="882" y="170" text-anchor="middle">Odds it ends up</text>
+<text class="s-big" x="882" y="194" text-anchor="middle">54%</text>
+
+<path class="s-edge" d="M118,206 V232 H882 V206"/>
+<path class="s-edge" d="M500,232 V256" marker-end="url(#a1)"/>
+
+<rect x="300" y="258" width="400" height="56" rx="9" fill="var(--f4b)" stroke="var(--f4)" stroke-width="1.6"/>
+<text class="s-lbl" x="500" y="282" text-anchor="middle">Safety check: is 2,371 below 2,448 below 2,497?</text>
+<text class="s-sub" x="500" y="301" text-anchor="middle">yes &rarr; show it &nbsp;&middot;&nbsp; no &rarr; something broke, flag NO TRADE</text>
+</svg>
+</div>
+
+<div class="note">
+  <span class="lbl">Why four models and not one</span>
+  <p>They are genuinely different questions. The <b>highest point</b> over five days is a maximum, not an average &mdash;
+  and a model trained to predict averages will guess it too low every single time. The same applies to the lowest point,
+  in the other direction. And &ldquo;will it go up, yes or no&rdquo; is a different kind of question altogether.</p>
+  <p>Together they give you a target, a stop level and a confidence, which is what you actually need to decide anything.
+  A single closing-price guess tells you where, but nothing about how far it might swing on the way.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="clock"><span class="num">4</span>The same ten steps on a clock</h2>
+<p class="sub">When each step runs on a normal weekday.</p>
+
+<table>
+<thead><tr><th>Time (IST)</th><th>Step</th><th>What happens</th><th>Service</th><th>Takes</th></tr></thead>
+<tbody>
+<tr><td><code>02:00 Sun</code></td><td>6</td><td>Retrain all four models</td><td>SageMaker Training</td><td>~5 min</td></tr>
+<tr><td><code>08:10</code></td><td>5</td><td>Build 40 features for 50 stocks</td><td>Glue</td><td>~4 min</td></tr>
+<tr><td><code>08:30</code></td><td>7</td><td>Run the forecast &mdash; 200 numbers</td><td>SageMaker Batch Transform</td><td>~3 min</td></tr>
+<tr><td><code>08:33</code></td><td>8, 9</td><td>Fix the odds, then the safety gate</td><td>Lambda</td><td>~20 sec</td></tr>
+<tr><td><code>08:35</code></td><td>10</td><td>Forecasts appear on the dashboard</td><td>Aurora &rarr; CloudFront</td><td>instant</td></tr>
+<tr><td><code>09:15&ndash;15:30</code></td><td>&mdash;</td><td>Live prices stream to the screen <em>(display only)</em></td><td>Fargate</td><td>6h 15m</td></tr>
+<tr><td><code>16:00</code></td><td>1&ndash;4</td><td>Collect today&rsquo;s candles, check, store</td><td>Lambda &rarr; S3</td><td>~2 min</td></tr>
+</tbody>
+</table>
+
+<p>Total compute on a normal weekday is about <b>nine minutes</b>. Everything else sits idle, which is why the
+monthly bill lands near <b>$121</b> rather than the ~$375 an always-on design would cost.</p>
+
+<div class="note warn">
+  <span class="lbl">One thing that often confuses people</span>
+  <p>The live price feed during market hours is <b>not</b> part of the ten steps. It drives the moving numbers
+  on the screen and is then discarded. The forecast is calculated once a day, before the market opens,
+  from yesterday&rsquo;s completed data.</p>
+  <p><b>Live prices feed the eyes. Completed daily data feeds the model.</b></p>
+</div>
+
+<div class="note stop">
+  <span class="lbl">What this system does not do</span>
+  <p>It does not place orders, connect to a broker, hold money, or give investment advice. The line ends at step 10
+  with a person reading a screen. Every forecast is shown alongside how accurate the model has actually been,
+  so a modest edge is never dressed up as a large one.</p>
+</div>
+
+<footer class="pagefoot">
+  <p>StockAI &middot; Flow Map v2.0 &middot; 29 October 2026 &middot; ap-south-1 (Mumbai)</p>
+  <p>Companion to <a href="index.html">System Architecture</a>,
+  <a href="prediction-engine.html">Prediction Engine</a> and
+  <a href="upstox-feasibility.html">Upstox Feasibility</a>.</p>
+</footer>
+
+</div>
+
+</body>
+</html>
