@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { getMarketDataProvider, subscribeToMarketData } from '../lib/marketData'
-import { getTrackedSymbols, setTrackedSymbols as persistTrackedSymbols } from '../lib/marketStream'
+import { getTrackedSymbols, setTrackedInstruments as persistTrackedInstruments, setTrackedSymbols as persistTrackedSymbols } from '../lib/marketStream'
 import { getBatchQuotes, hasMarketRestApi, isIndianMarketOpen } from '../lib/upstoxRest'
 
 const MarketDataContext = createContext(null)
@@ -25,6 +25,12 @@ export function MarketDataProvider({ children }) {
 
     async function loadLambdaSnapshot() {
       setStatus('connecting')
+      if (!symbols.length) {
+        setQuotes({})
+        setError(null)
+        setStatus('connected')
+        return
+      }
       try {
         const snapshot = await getBatchQuotes(symbols)
         if (!active) return
@@ -46,6 +52,10 @@ export function MarketDataProvider({ children }) {
       refreshTimer = window.setInterval(loadLambdaSnapshot, 5 * 60_000)
       return () => { active = false; window.clearInterval(refreshTimer) }
     }
+
+    // Seed the UI immediately, then let AppSync/Fargate ticks replace the
+    // snapshot with live prices as they arrive.
+    if (provider !== 'mock' && hasMarketRestApi()) loadLambdaSnapshot()
 
     const closeStream = subscribeToMarketData({
       onSnapshot(snapshot) { setQuotes(Object.fromEntries(snapshot.map((quote) => [quote.symbol.toUpperCase(), { ...quote, source: provider === 'mock' ? 'demo' : 'fargate' }]))) },
@@ -69,14 +79,24 @@ export function MarketDataProvider({ children }) {
     return saved
   }, [])
 
+  const updateInstruments = useCallback((value) => {
+    const saved = persistTrackedInstruments(value)
+    const nextSymbols = saved.map((item) => item.symbol)
+    setSymbols(nextSymbols)
+    setQuotes({})
+    setError(null)
+    setGeneration((current) => current + 1)
+    return saved
+  }, [])
+
   const value = useMemo(() => ({
     provider, status, connected: status === 'connected', error, quotes, marketOpen,
-    quoteList: Object.values(quotes), symbols, updateSymbols,
+    quoteList: Object.values(quotes), symbols, updateSymbols, updateInstruments,
     getQuote(symbol) { return quotes[String(symbol).toUpperCase()] || null },
     getPrice(symbol, fallback) { return quotes[String(symbol).toUpperCase()]?.price ?? fallback },
     isLive(symbol) { return provider !== 'mock' && Boolean(quotes[String(symbol).toUpperCase()]) },
     getSource(symbol) { return quotes[String(symbol).toUpperCase()]?.source || 'demo' },
-  }), [provider, status, error, quotes, symbols, updateSymbols, marketOpen])
+  }), [provider, status, error, quotes, symbols, updateSymbols, updateInstruments, marketOpen])
 
   return <MarketDataContext.Provider value={value}>{children}</MarketDataContext.Provider>
 }

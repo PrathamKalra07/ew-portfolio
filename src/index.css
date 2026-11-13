@@ -9,7 +9,7 @@
 
   html {
     min-width: 320px;
-    background: #f4f1e8;
+    background: #f4f5ef;
   }
 
   body {
@@ -18,10 +18,49 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    color: #101914;
+    background:
+      radial-gradient(circle at 75% 0%, rgba(215, 243, 107, 0.14), transparent 24rem),
+      #f4f5ef;
   }
 
   button,
-  input {
+  input,
+  select,
+  textarea {
     font: inherit;
+  }
+
+  button,
+  a,
+  input,
+  select {
+    transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 160ms ease;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 3px solid rgba(72, 99, 247, 0.25);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .surface {
+    @apply rounded-[1.75rem] border border-ink/10 bg-white shadow-soft;
+  }
+
+  .eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[0.22em] text-ink/40;
+  }
+
+  .field {
+    @apply h-11 rounded-xl border border-ink/10 bg-white px-3 text-sm outline-none placeholder:text-ink/30 focus:border-cobalt;
+  }
+
+  .button-primary {
+    @apply inline-flex h-11 items-center justify-center rounded-xl bg-ink px-4 text-xs font-bold text-white hover:-translate-y-0.5 hover:bg-forest disabled:pointer-events-none disabled:opacity-40;
   }
 }

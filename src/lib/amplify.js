@@ -62,9 +62,12 @@ export async function signInWithAmplify(email, password) {
   })
 }
 
-export async function confirmAmplifySignIn(challengeResponse) {
+export async function confirmAmplifySignIn(challengeResponse, userAttributes) {
   configureAmplify()
-  return confirmSignIn({ challengeResponse })
+  return confirmSignIn({
+    challengeResponse,
+    ...(userAttributes && Object.keys(userAttributes).length ? { options: { userAttributes } } : {}),
+  })
 }
 
 export async function getAmplifySession() {

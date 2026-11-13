@@ -1,0 +1,60 @@
+{
+  "Comment": "NewsData collection for all configured watchlisted stocks; morning run also cleans and exports features",
+  "QueryLanguage": "JSONPath",
+  "StartAt": "GetNewsCatalog",
+  "States": {
+    "GetNewsCatalog": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {"FunctionName":"arn:aws:lambda:ap-southeast-2:055280967651:function:news_catalog","Payload.$":"$"},
+      "ResultPath":"$.catalog", "Next":"HasBatches"
+    },
+    "HasBatches": {
+      "Type":"Choice",
+      "Choices":[{"Variable":"$.catalog.Payload.batches[0]","IsPresent":true,"Next":"IngestBatches"}],
+      "Default":"NoStocks"
+    },
+    "IngestBatches": {
+      "Type":"Map", "ItemsPath":"$.catalog.Payload.batches", "MaxConcurrency":1,
+      "ItemSelector":{"stocks.$":"$$.Map.Item.Value"},
+      "ItemProcessor": {
+        "ProcessorConfig":{"Mode":"INLINE"},
+        "StartAt":"FetchNewsData",
+        "States": {
+          "FetchNewsData": {
+            "Type":"Task", "Resource":"arn:aws:states:::lambda:invoke",
+            "Parameters":{"FunctionName":"arn:aws:lambda:ap-southeast-2:055280967651:function:newsdata_ingest",
+                          "Payload":{"stocks.$":"$.stocks","max_pages":1}},
+            "ResultPath":"$.ingestion",
+            "Retry":[{"ErrorEquals":["Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException","Lambda.TooManyRequestsException"],"IntervalSeconds":3,"BackoffRate":2,"MaxAttempts":2}],
+            "Next":"IndexNewsInS3"
+          },
+          "IndexNewsInS3": {
+            "Type":"Task", "Resource":"arn:aws:states:::lambda:invoke",
+            "Parameters":{"FunctionName":"arn:aws:lambda:ap-southeast-2:055280967651:function:news_index",
+                          "Payload":{"s3_key.$":"$.ingestion.Payload.s3_key"}},
+            "ResultPath":"$.index","End":true
+          }
+        }
+      },
+      "ResultPath":"$.ingestion_results", "Next":"IsMorning"
+    },
+    "IsMorning": {
+      "Type":"Choice",
+      "Choices":[{"Variable":"$.mode","StringEquals":"morning","Next":"RunNewsGlue"}],
+      "Default":"EveningComplete"
+    },
+    "RunNewsGlue": {
+      "Type":"Task", "Resource":"arn:aws:states:::glue:startJobRun.sync",
+      "Parameters":{"JobName":"stockai-clean-news"},
+      "ResultPath":"$.glue","Next":"ExportNewsFeatures"
+    },
+    "ExportNewsFeatures": {
+      "Type":"Task", "Resource":"arn:aws:states:::lambda:invoke",
+      "Parameters":{"FunctionName":"arn:aws:lambda:ap-southeast-2:055280967651:function:news_feature_export",
+                    "Payload":{"batches.$":"$.catalog.Payload.batches"}},
+      "ResultPath":"$.features","End":true
+    },
+    "EveningComplete":{"Type":"Succeed"},
+    "NoStocks":{"Type":"Succeed"}
+  }
+}

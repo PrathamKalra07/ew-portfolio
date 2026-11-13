@@ -1,0 +1,4 @@
+export const MARKET_UNIVERSE = [
+  'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'BHARTIARTL', 'TCS',
+  'INFY', 'SBIN', 'ITC', 'LT', 'HINDUNILVR',
+]

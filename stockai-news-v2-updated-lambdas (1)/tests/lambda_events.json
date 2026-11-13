@@ -1,0 +1,9 @@
+{
+  "news_catalog": {},
+  "newsdata_ingest": {"stocks":[{"instrument_key":"NSE_EQ|INE002A01018","trading_symbol":"RELIANCE","stock_name":"Reliance Industries Limited","market_id":"RELIANCE-IN-NSE"}],"max_pages":1},
+  "news_index": {"s3_key":"news/staging/newsdata/REPLACE_WITH_REAL_OBJECT.json"},
+  "gdelt_index": {"s3_key":"news/staging/gdelt/REPLACE_WITH_REAL_OBJECT.json"},
+  "news_feature_export": {"batches":[[{"instrument_key":"NSE_EQ|INE002A01018"}]]},
+  "state_machine_evening": {"mode":"evening"},
+  "state_machine_morning": {"mode":"morning"}
+}
